@@ -1,3 +1,4 @@
 *.sublime*
 *.o
 lc-*
+*DS_Store
