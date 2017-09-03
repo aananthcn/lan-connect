@@ -8,14 +8,20 @@ using namespace LanConnect;
 
 SecureSocket::SecureSocket() {
 	mSecPath = new std::string("./");
+	mActive = false;
 }
 
 SecureSocket::SecureSocket(const char *sec_path) {
 	mSecPath = new std::string(sec_path);
+	mActive = false;
 }
 
 SecureSocket::~SecureSocket() {
 	delete mSecPath;
+	if (mActive) {
+		std::cout << "warning: application is not closing SecureSocket properly!\n";
+		Disconnect();
+	}
 }
 
 
@@ -35,21 +41,21 @@ void SecureSocket::Bind(int fd, const struct sockaddr *sa, socklen_t salen)
         if(bind(fd, sa, salen) < 0)
                 std::cout << "bind error";
 }
-        
+
 
 void SecureSocket::Listen(int fd, int backlog)
-{       
+{
         char *ptr;
 
         /*4can override 2nd argument with environment variable */
         if((ptr = getenv("LISTENQ")) != NULL)
                 backlog = atoi(ptr);
-        
+
         if(listen(fd, backlog) < 0)
                 std::cout << "listen error";
 }
-        
-        
+
+
 Sigfunc* SecureSocket::Signal(int signo, Sigfunc *func)        /* for our signal() function */
 {
         Sigfunc *sigfunc;
@@ -62,35 +68,35 @@ Sigfunc* SecureSocket::Signal(int signo, Sigfunc *func)        /* for our signal
 
 
 SSL_CTX* SecureSocket::SSL_InitContext(enum eSocketType role) {
-	const SSL_METHOD *method;                                                         
-	SSL_CTX *ctx;                                                                     
+	const SSL_METHOD *method;
+	SSL_CTX *ctx;
 
-	SSL_library_init();                                                               
+	SSL_library_init();
 
-    /* load & register all cryptos, etc. */                                           
-	OpenSSL_add_all_algorithms();                                                     
+    /* load & register all cryptos, etc. */
+	OpenSSL_add_all_algorithms();
 
-    /* load all error messages */                                                     
-	SSL_load_error_strings();                                                         
+    /* load all error messages */
+	SSL_load_error_strings();
 
 	if (role == SERVER_SOCKET) {
-    	/* create new server-method instance */                                           
+    	/* create new server-method instance */
 		method = TLSv1_2_server_method();
 	}
 	else {
-		/* create new client-method instance */                                           
+		/* create new client-method instance */
 		method = TLSv1_2_client_method();
 
-	}                                                 
+	}
 
-    /* create new context from method */                                              
-	ctx = SSL_CTX_new(method);                                                        
-	if(ctx == NULL) {                                                                 
-		ERR_print_errors_fp(stderr);                                              
-		std::cout << "Unable to create new SSL Context\n";                             
-	}                                                                                 
+    /* create new context from method */
+	ctx = SSL_CTX_new(method);
+	if(ctx == NULL) {
+		ERR_print_errors_fp(stderr);
+		std::cout << "Unable to create new SSL Context\n";
+	}
 
-	return ctx;      
+	return ctx;
 }
 
 
@@ -138,44 +144,48 @@ int SecureSocket::SSL_LoadCertificate(SSL_CTX *ctx) {
 
 
 void SecureSocket::SSL_ShowCertificate(SSL *ssl, enum eSocketType role) {
-	X509 *cert;                                                                       
-	char *line, *caller;
+	X509 *cert;
+	char *line, *caller, *callee;
 	long res;
 	char client[] = "Client";
 	char server[] = "Server";
 
-    /* get the server's certificate */                                                
+    /* get the server's certificate */
 	cert = SSL_get_peer_certificate(ssl);
-	if (role == CLIENT_SOCKET)
+	if (role == CLIENT_SOCKET) {
 		caller = client;
-	else
+		callee = server;
+	}
+	else {
 		caller = server;
+		callee = client;
+	}
 
 	std::cout << "\n\n";
 	if(cert != NULL) {
-		std::cout << caller << " certificate:\n";             
-		line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);              
+		std::cout << caller << " certificate:\n";
+		line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
 		std::cout << "\tSubject: " << line << "\n";
 		free(line);
-		line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);               
+		line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
 		std::cout << "\tIssuer: " << line << "\n";
 		free(line);
 
-		X509_free(cert);                                                          
-	}                                                                                 
-	else {  
-		std::cout << "OpenSSL: No certificates from server.\n";                         
-		res = SSL_get_verify_result(ssl);                                         
+		X509_free(cert);
+	}
+	else {
+		std::cout << "OpenSSL: No certificates from " << callee << ".\n";
+		res = SSL_get_verify_result(ssl);
 		if(X509_V_OK != res) {
-			std::cout << "Certificate error code: " << res << "\n";                      
-			ERR_print_errors_fp(stderr);                                      
-		}       
-	}               
-	std::cout << "\n";   
+			std::cout << "Certificate error code: " << res << "\n";
+			ERR_print_errors_fp(stderr);
+		}
+	}
+	std::cout << "\n";
 }
 
 
-int SecureSocket::Init() {
+int SecureSocket::Start() {
 	int                     listenfd, connfd;
 	int                     en = 1;
 	socklen_t               clilen;
@@ -184,21 +194,21 @@ int SecureSocket::Init() {
 
 
 	mCTX = SSL_InitContext(SERVER_SOCKET);
-	if (mCTX == NULL)                                                               
-		return -1;                                                                
+	if (mCTX == NULL)
+		return -1;
 
-	if (0 > SSL_LoadCertificate(mCTX))                                                
-		return -1;                                                                
+	if (0 > SSL_LoadCertificate(mCTX))
+		return -1;
 
-	listenfd = Socket(AF_INET, SOCK_STREAM, 0);                                       
-	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &en, sizeof(int)) < 0)          
-		std::cout << "setsockopt(SO_REUSEADDR) failed\n";                              
+	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &en, sizeof(int)) < 0)
+		std::cout << "setsockopt(SO_REUSEADDR) failed\n";
 
 	// bind a socket and listen for connections
-	bzero(&servaddr, sizeof(servaddr));                                               
-	servaddr.sin_family      = AF_INET;                                               
-	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);                                     
-	servaddr.sin_port        = htons(SERV_PORT);                                      
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family      = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port        = htons(SERV_PORT);
 	Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
 	Listen(listenfd, LISTENQ); // check LISTENQ to increase more clients
 	std::cout << "listening for incoming socket...\n";
@@ -223,6 +233,7 @@ int SecureSocket::Init() {
 	// print certificates for server admin
 	std::cout << "\n\nStart of SecureSocket (server) session \n";
 	SSL_ShowCertificate(mSSL, SERVER_SOCKET);
+	mActive = true;
 
 	return 0;
 }
@@ -237,22 +248,20 @@ void SecureSocket::Stop() {
 	}
 
 	// obtain the current socket descriptor from SSL layer
-	//if (role == SERVER_SOCKET) {
-		currfd = SSL_get_fd(mSSL);
-	//}
+	currfd = SSL_get_fd(mSSL);
 
     // clean up ssl
 	SSL_free(mSSL);
 
-	//if (role == SERVER_SOCKET) {
-		if (close(currfd) == -1) {
+	// close the socket & free the SSL context
+	if (close(currfd) == -1) {
     		/* parent closes connected socket */
-    		std::cout << "close error";
-    	}
-	//}
+		std::cout << "close error";
+	}
 	SSL_CTX_free(mCTX);
 
 	std::cout << "SecureSocket Session Ended!\n\n";
+	mActive = false;
 }
 
 
@@ -294,6 +303,7 @@ int SecureSocket::Connect(const char *ip) {
 		std::cout << "\nStart of SecureSocket (client) session\n";
 		SSL_ShowCertificate(mSSL, CLIENT_SOCKET);
 	}
+	mActive = true;
 
 	return 0;
 }

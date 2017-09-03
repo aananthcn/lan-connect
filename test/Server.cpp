@@ -7,14 +7,16 @@ using namespace LanConnect;
 
 int main(void)
 {
-	SecureSocket sk("../security");
+	SecureSocket ssk("../security");
 
-	if (sk.Init() < 0) {
+	if (ssk.Start() < 0) {
 		std::cout << "Unable to create server socket\n";
 		return -1;
 	}
 
 	sleep(5);
+
+	ssk.Stop();
 
 	return 0;
 }

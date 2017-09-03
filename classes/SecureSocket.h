@@ -19,16 +19,16 @@ extern "C" {
 	#include <unistd.h>
 }
 
-/* Following could be derived from SOMAXCONN in <sys/socket.h>, but many                  
-   kernels still #define it as 5, while actually supporting many more */                  
-#define LISTENQ         1024    /* 2nd argument to listen() */                            
-                
+/* Following could be derived from SOMAXCONN in <sys/socket.h>, but many
+   kernels still #define it as 5, while actually supporting many more */
+#define LISTENQ         1024    /* 2nd argument to listen() */
+
 /* Define some port number that can be used for our examples */
-#define SERV_PORT        9877                   /* TCP and UDP */                         
-                        
-/* Following shortens all the typecasts of pointer arguments: */                          
-#define SA      struct sockaddr 
-                                                    
+#define SERV_PORT        9877                   /* TCP and UDP */
+
+/* Following shortens all the typecasts of pointer arguments: */
+#define SA      struct sockaddr
+
 
 namespace LanConnect {
 
@@ -47,7 +47,7 @@ namespace LanConnect {
 		SecureSocket();
 		SecureSocket(const char *sec_path);
 		~SecureSocket();
-		int Init();				// server
+		int Start();					// server
 		void Stop();
 		int Connect(const char *ip);	// client
 		void Disconnect();
@@ -56,6 +56,7 @@ namespace LanConnect {
 		SSL_CTX  *mCTX;
 		SSL *mSSL;
 		std::string *mSecPath;
+		bool mActive;
 
 		SSL_CTX* SSL_InitContext(enum eSocketType role);
 		int SSL_LoadCertificate(SSL_CTX *ctx);

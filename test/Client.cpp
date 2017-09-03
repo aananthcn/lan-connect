@@ -7,9 +7,10 @@ using namespace LanConnect;
 
 int main(void)
 {
-	SecureSocket sk;
+	SecureSocket ssk;
 
-	sk.Connect("localhost");
+	ssk.Connect("localhost");
+	ssk.Disconnect();
 
 	return 0;
 }

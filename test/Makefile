@@ -7,7 +7,7 @@ COPY = cp -r
 CC = g++
 
 
-LOCAL_IFLAGS = -I. -I../classes 
+LOCAL_IFLAGS = -I. -I../classes
 LOCAL_CFLAGS = -Wall -g -std=c++11 ${LOCAL_IFLAGS} ${GLOBAL_IFLAGS}
 LOCAL_LFLAGS = -std=c++11 ${GLOBAL_LFLAGS}
 
@@ -38,7 +38,7 @@ lc-server: ${server_objects}
 
 
 clean:
-	$(RM) ${client_objects} ${server_objects} 
+	$(RM) ${client_objects} ${server_objects}
 	$(RM) ${lc-client} ${lc-server}
 
 
