@@ -39,7 +39,8 @@ namespace LanConnect {
 		MAX_SOCKET_TYPE
 	};
 
-	typedef void Sigfunc(int);   /* for signal handlers */
+	typedef void SigFunc(int);   								// for signal handlers
+	typedef void RvCbFunc(char *data, int len, bool more_data);	// for Async Recv function
 
 
 	class SecureSocket {
@@ -47,15 +48,21 @@ namespace LanConnect {
 		SecureSocket();
 		SecureSocket(const char *sec_path);
 		~SecureSocket();
-		int Start();					// server
-		void Stop();
-		int Connect(const char *ip);	// client
+
+		int Send(char *data, int length);
+		int Recv(char *data, int max_len);
+		int RecvAsync(RvCbFunc *cb);
+
+		int Open();						// server functions
+		void Close();
+
+		int Connect(const char *ip);	// client functions
 		void Disconnect();
 
 	private:
 		SSL_CTX  *mCTX;
 		SSL *mSSL;
-		std::string *mSecPath;
+		std::string *mSecPath; 			// path to certificats and keys
 		bool mActive;
 
 		SSL_CTX* SSL_InitContext(enum eSocketType role);
@@ -64,7 +71,7 @@ namespace LanConnect {
 		int Socket(int family, int type, int protocol);
 		void Bind(int fd, const struct sockaddr *sa, socklen_t salen);
 		void Listen(int fd, int backlog);
-		Sigfunc* Signal(int signo, Sigfunc *func);
+		SigFunc* Signal(int signo, SigFunc *func);
 	};
 
 }

@@ -8,8 +8,15 @@ using namespace LanConnect;
 int main(void)
 {
 	SecureSocket ssk;
+	char buffer[512];
 
 	ssk.Connect("localhost");
+
+	sprintf(buffer, "Hello Server!!");
+	ssk.Send(buffer, strlen(buffer));
+	ssk.Recv(buffer, sizeof(buffer));
+	std::cout << "Received: " << buffer << "\n";
+
 	ssk.Disconnect();
 
 	return 0;

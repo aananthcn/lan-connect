@@ -56,9 +56,9 @@ void SecureSocket::Listen(int fd, int backlog)
 }
 
 
-Sigfunc* SecureSocket::Signal(int signo, Sigfunc *func)        /* for our signal() function */
+SigFunc* SecureSocket::Signal(int signo, SigFunc *func)        /* for our signal() function */
 {
-        Sigfunc *sigfunc;
+        SigFunc *sigfunc;
 
         if((sigfunc = signal(signo, func)) == SIG_ERR)
                 std::cout << "signal error";
@@ -185,7 +185,7 @@ void SecureSocket::SSL_ShowCertificate(SSL *ssl, enum eSocketType role) {
 }
 
 
-int SecureSocket::Start() {
+int SecureSocket::Open() {
 	int                     listenfd, connfd;
 	int                     en = 1;
 	socklen_t               clilen;
@@ -239,7 +239,7 @@ int SecureSocket::Start() {
 }
 
 
-void SecureSocket::Stop() {
+void SecureSocket::Close() {
 	int currfd;
 
 	if ((mCTX == NULL) || (mSSL == NULL)) {
@@ -309,8 +309,59 @@ int SecureSocket::Connect(const char *ip) {
 }
 
 
-//void SecureSocket::Disconnect(enum eSocketType role) {
 void SecureSocket::Disconnect() {
-	Stop();
+	Close();
 }
 
+
+int SecureSocket::Send(char *data, int length) {
+	int bytes;
+
+	if ((data == NULL) || (length < 1)) {
+		std::cout << __func__ << ": invalid inputs\n";
+		return -1;
+	}
+
+	// send data over secure socket
+	bytes = SSL_write(mSSL, data, length);
+
+	return bytes;
+}
+
+
+int SecureSocket::Recv(char *data, int max_len) {
+	int rcnt = 0;
+	int totalcnt = 0;
+
+	// clearing old data in buffer
+	memset(data, 0, max_len);
+
+	do {
+        // read a chunk from secure socket connection
+		rcnt = SSL_read(mSSL, data, max_len - totalcnt);
+		if(rcnt < 0) {
+			if(errno == EINTR)
+				continue;
+
+			std::cout << __func__ << ": read error " << strerror(errno) << "\n";
+			totalcnt = -1 * (totalcnt + 1);
+			break;
+		}
+
+        // check for end of file
+		if(rcnt == 0) {
+			break;
+		}
+
+		totalcnt += rcnt;
+	} while (0);
+
+	return totalcnt;
+}
+
+
+int SecureSocket::RecvAsync(RvCbFunc *cb) {
+	int stat = 0;
+
+	return stat;
+}
