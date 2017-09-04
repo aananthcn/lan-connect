@@ -17,6 +17,9 @@ int main(void)
 	ssk.Recv(buffer, sizeof(buffer));
 	std::cout << "Received: " << buffer << "\n";
 
+	sprintf(buffer, "Thank you! I received the data!");
+	ssk.Send(buffer, strlen(buffer));
+
 	ssk.Disconnect();
 
 	return 0;

@@ -17,6 +17,7 @@ extern "C" {
 	#include <stdio.h>
 	#include <stdlib.h>
 	#include <unistd.h>
+	#include <pthread.h>
 }
 
 /* Following could be derived from SOMAXCONN in <sys/socket.h>, but many
@@ -39,8 +40,17 @@ namespace LanConnect {
 		MAX_SOCKET_TYPE
 	};
 
-	typedef void SigFunc(int);   								// for signal handlers
-	typedef void RvCbFunc(char *data, int len, bool more_data);	// for Async Recv function
+	typedef void SigFunc(int);   				// for signal handlers
+	typedef void RvCbFunc(char *data, int len);	// for Async Recv function
+
+
+	struct RxObj
+	{
+		char *data;
+		int max_len;
+		RvCbFunc *cb;
+		SSL *ssl;
+	};
 
 
 	class SecureSocket {
@@ -51,7 +61,7 @@ namespace LanConnect {
 
 		int Send(char *data, int length);
 		int Recv(char *data, int max_len);
-		int RecvAsync(RvCbFunc *cb);
+		int RecvAsync(char *data, int max_len, RvCbFunc *cb);
 
 		int Open();						// server functions
 		void Close();
@@ -72,6 +82,9 @@ namespace LanConnect {
 		void Bind(int fd, const struct sockaddr *sa, socklen_t salen);
 		void Listen(int fd, int backlog);
 		SigFunc* Signal(int signo, SigFunc *func);
+
+		static void* RxThread(void *arg);
+		static int RecvFromSslSock(SSL *ssl, char *data, int len);
 	};
 
 }

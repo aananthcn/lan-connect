@@ -27,43 +27,43 @@ SecureSocket::~SecureSocket() {
 
 int SecureSocket::Socket(int family, int type, int protocol)
 {
-        int n;
+	int n;
 
-        if((n = socket(family, type, protocol)) < 0)
-                std::cout << "socket error";
+	if((n = socket(family, type, protocol)) < 0)
+		std::cout << "socket error";
 
-        return (n);
+	return (n);
 }
 
 
 void SecureSocket::Bind(int fd, const struct sockaddr *sa, socklen_t salen)
 {
-        if(bind(fd, sa, salen) < 0)
-                std::cout << "bind error";
+	if(bind(fd, sa, salen) < 0)
+		std::cout << "bind error";
 }
 
 
 void SecureSocket::Listen(int fd, int backlog)
 {
-        char *ptr;
+	char *ptr;
 
         /*4can override 2nd argument with environment variable */
-        if((ptr = getenv("LISTENQ")) != NULL)
-                backlog = atoi(ptr);
+	if((ptr = getenv("LISTENQ")) != NULL)
+		backlog = atoi(ptr);
 
-        if(listen(fd, backlog) < 0)
-                std::cout << "listen error";
+	if(listen(fd, backlog) < 0)
+		std::cout << "listen error";
 }
 
 
 SigFunc* SecureSocket::Signal(int signo, SigFunc *func)        /* for our signal() function */
 {
-        SigFunc *sigfunc;
+	SigFunc *sigfunc;
 
-        if((sigfunc = signal(signo, func)) == SIG_ERR)
-                std::cout << "signal error";
+	if((sigfunc = signal(signo, func)) == SIG_ERR)
+		std::cout << "signal error";
 
-        return (sigfunc);
+	return (sigfunc);
 }
 
 
@@ -161,7 +161,6 @@ void SecureSocket::SSL_ShowCertificate(SSL *ssl, enum eSocketType role) {
 		callee = client;
 	}
 
-	std::cout << "\n\n";
 	if(cert != NULL) {
 		std::cout << caller << " certificate:\n";
 		line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
@@ -197,8 +196,12 @@ int SecureSocket::Open() {
 	if (mCTX == NULL)
 		return -1;
 
+#if 0
 	if (0 > SSL_LoadCertificate(mCTX))
 		return -1;
+#else
+	SSL_LoadCertificate(mCTX);
+#endif
 
 	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
 	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &en, sizeof(int)) < 0)
@@ -231,7 +234,7 @@ int SecureSocket::Open() {
 		ERR_print_errors_fp(stderr);
 
 	// print certificates for server admin
-	std::cout << "\n\nStart of SecureSocket (server) session \n";
+	std::cout << "Start of SecureSocket (server) session \n";
 	SSL_ShowCertificate(mSSL, SERVER_SOCKET);
 	mActive = true;
 
@@ -260,7 +263,7 @@ void SecureSocket::Close() {
 	}
 	SSL_CTX_free(mCTX);
 
-	std::cout << "SecureSocket Session Ended!\n\n";
+	std::cout << "SecureSocket Session Ended!\n";
 	mActive = false;
 }
 
@@ -329,16 +332,21 @@ int SecureSocket::Send(char *data, int length) {
 }
 
 
-int SecureSocket::Recv(char *data, int max_len) {
+int SecureSocket::RecvFromSslSock(SSL *ssl, char *data, int len) {
 	int rcnt = 0;
 	int totalcnt = 0;
 
+	if ((ssl == NULL) || (data == NULL) || (len < 1)) {
+		std::cout << __func__ << "(): invalid arguments\n";
+		return -1;
+	}
+
 	// clearing old data in buffer
-	memset(data, 0, max_len);
+	memset(data, 0, len);
 
 	do {
         // read a chunk from secure socket connection
-		rcnt = SSL_read(mSSL, data, max_len - totalcnt);
+		rcnt = SSL_read(ssl, data, len - totalcnt);
 		if(rcnt < 0) {
 			if(errno == EINTR)
 				continue;
@@ -360,8 +368,48 @@ int SecureSocket::Recv(char *data, int max_len) {
 }
 
 
-int SecureSocket::RecvAsync(RvCbFunc *cb) {
-	int stat = 0;
+int SecureSocket::Recv(char *data, int max_len) {
+	return RecvFromSslSock(mSSL, data, max_len);
+}
 
-	return stat;
+
+void* SecureSocket::RxThread(void *arg) {
+	struct RxObj *rxo;
+	int rcnt = 0;
+
+	rxo = (struct RxObj *) arg;
+	if (rxo == NULL) {
+		std::cout << __func__ << ": Invalid argument\n";
+		return NULL;
+	}
+
+	// receive one chunk of data
+	rcnt = RecvFromSslSock(rxo->ssl, rxo->data, rxo->max_len);
+
+	// pass back the data over callback function
+	rxo->cb(rxo->data, rcnt);
+	delete rxo;
+
+	// exit thread -- assuming the caller would make another Async Recv call
+	return NULL;
+}
+
+
+int SecureSocket::RecvAsync(char *data, int max_len, RvCbFunc *cb) {
+	pthread_t rx_thread;
+	RxObj *rx_obj;
+
+	// create new object on heap, copy data and pass to RxThread for use and delete
+	rx_obj = new RxObj;
+	rx_obj->data 	= data;
+	rx_obj->max_len = max_len;
+	rx_obj->cb 		= cb;
+	rx_obj->ssl 	= mSSL;
+
+	if (pthread_create(&rx_thread, NULL, this->RxThread, rx_obj)) {
+		std::cout << __func__ << "Error creating rx thread!\n";
+		return -1;
+	}
+
+	return 0;
 }

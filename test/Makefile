@@ -39,7 +39,7 @@ lc-server: ${server_objects}
 
 clean:
 	$(RM) ${client_objects} ${server_objects}
-	$(RM) ${lc-client} ${lc-server}
+	$(RM) lc-client lc-server
 
 
 debug: LOCAL_CFLAGS += -g -DDEBUG
