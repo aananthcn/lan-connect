@@ -269,6 +269,10 @@ void SecureSocket::Close() {
 
 
 int SecureSocket::Connect(const char *ip) {
+	return Connect(ip, SERV_PORT);
+}
+
+int SecureSocket::Connect(const char *ip, int port) {
 	int sockfd;
 	struct sockaddr_in servaddr;
 
@@ -287,9 +291,9 @@ int SecureSocket::Connect(const char *ip) {
 
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
-	servaddr.sin_port = htons(SERV_PORT);
+	servaddr.sin_port = htons(port);
 	if (inet_pton(AF_INET, ip, &servaddr.sin_addr) < 0)
-		std::cout << "inet_pton error for port: " << SERV_PORT << "\n";
+		std::cout << "inet_pton error for port: " << port << "\n";
 
 	std::cout << "connecting to " << ip << "\n";
 	if (connect(sockfd, (SA *) &servaddr, sizeof(servaddr)) < 0)

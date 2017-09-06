@@ -67,6 +67,7 @@ namespace LanConnect {
 		void Close();
 
 		int Connect(const char *ip);	// client functions
+		int Connect(const char *ip, int port);
 		void Disconnect();
 
 	private:
