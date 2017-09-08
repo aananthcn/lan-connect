@@ -14,7 +14,7 @@ void rx_callback(char *data, int len)
 
 int main(void)
 {
-	SecureSocket ssk("../security");
+	SecureSocket ssk("../../security");
 	char buffer[512];
 
 	if (ssk.Open() < 0) {

@@ -25,7 +25,7 @@ SecureSocket::~SecureSocket() {
 }
 
 
-int SecureSocket::Socket(int family, int type, int protocol)
+int SecureSocket::sSocket(int family, int type, int protocol)
 {
 	int n;
 
@@ -36,14 +36,14 @@ int SecureSocket::Socket(int family, int type, int protocol)
 }
 
 
-void SecureSocket::Bind(int fd, const struct sockaddr *sa, socklen_t salen)
+void SecureSocket::sBind(int fd, const struct sockaddr *sa, socklen_t salen)
 {
 	if(bind(fd, sa, salen) < 0)
 		std::cout << "bind error";
 }
 
 
-void SecureSocket::Listen(int fd, int backlog)
+void SecureSocket::sListen(int fd, int backlog)
 {
 	char *ptr;
 
@@ -56,7 +56,7 @@ void SecureSocket::Listen(int fd, int backlog)
 }
 
 
-SigFunc* SecureSocket::Signal(int signo, SigFunc *func)        /* for our signal() function */
+SigFunc* SecureSocket::sSignal(int signo, SigFunc *func)        /* for our signal() function */
 {
 	SigFunc *sigfunc;
 
@@ -67,7 +67,7 @@ SigFunc* SecureSocket::Signal(int signo, SigFunc *func)        /* for our signal
 }
 
 
-SSL_CTX* SecureSocket::SSL_InitContext(enum eSocketType role) {
+SSL_CTX* SecureSocket::sslInitContext(enum eSocketType role) {
 	const SSL_METHOD *method;
 	SSL_CTX *ctx;
 
@@ -100,7 +100,7 @@ SSL_CTX* SecureSocket::SSL_InitContext(enum eSocketType role) {
 }
 
 
-int SecureSocket::SSL_LoadCertificate(SSL_CTX *ctx) {
+int SecureSocket::sslLoadCertificate(SSL_CTX *ctx) {
 	char CertFileName[] = "cacert.pem";
 	char KeyFileName[] = "private.pem";
 	char CertFile[512];
@@ -143,7 +143,7 @@ int SecureSocket::SSL_LoadCertificate(SSL_CTX *ctx) {
 }
 
 
-void SecureSocket::SSL_ShowCertificate(SSL *ssl, enum eSocketType role) {
+void SecureSocket::sslShowCertificate(SSL *ssl, enum eSocketType role) {
 	X509 *cert;
 	char *line, *caller, *callee;
 	long res;
@@ -192,18 +192,18 @@ int SecureSocket::Open() {
 	void sig_chld(int);
 
 
-	mCTX = SSL_InitContext(SERVER_SOCKET);
+	mCTX = sslInitContext(SERVER_SOCKET);
 	if (mCTX == NULL)
 		return -1;
 
 #if 0
-	if (0 > SSL_LoadCertificate(mCTX))
+	if (0 > sslLoadCertificate(mCTX))
 		return -1;
 #else
-	SSL_LoadCertificate(mCTX);
+	sslLoadCertificate(mCTX);
 #endif
 
-	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+	listenfd = sSocket(AF_INET, SOCK_STREAM, 0);
 	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &en, sizeof(int)) < 0)
 		std::cout << "setsockopt(SO_REUSEADDR) failed\n";
 
@@ -212,8 +212,8 @@ int SecureSocket::Open() {
 	servaddr.sin_family      = AF_INET;
 	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	servaddr.sin_port        = htons(SERV_PORT);
-	Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
-	Listen(listenfd, LISTENQ); // check LISTENQ to increase more clients
+	sBind(listenfd, (SA *) &servaddr, sizeof(servaddr));
+	sListen(listenfd, LISTENQ); // check LISTENQ to increase more clients
 	std::cout << "listening for incoming socket...\n";
 
 	//  accept conn. based on listenfd and create new socket - connfd
@@ -235,7 +235,7 @@ int SecureSocket::Open() {
 
 	// print certificates for server admin
 	std::cout << "Start of SecureSocket (server) session \n";
-	SSL_ShowCertificate(mSSL, SERVER_SOCKET);
+	sslShowCertificate(mSSL, SERVER_SOCKET);
 	mActive = true;
 
 	return 0;
@@ -281,13 +281,13 @@ int SecureSocket::Connect(const char *ip, int port) {
 		return -1;
 	}
 
-	mCTX = SSL_InitContext(CLIENT_SOCKET);
+	mCTX = sslInitContext(CLIENT_SOCKET);
 	if(mCTX == NULL) {
 		std::cout << "SSL context init failed\n";
 		return -1;
 	}
 
-	sockfd = Socket(AF_INET, SOCK_STREAM, 0);
+	sockfd = sSocket(AF_INET, SOCK_STREAM, 0);
 
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
@@ -308,7 +308,7 @@ int SecureSocket::Connect(const char *ip, int port) {
 		ERR_print_errors_fp(stderr);
 	else {
 		std::cout << "\nStart of SecureSocket (client) session\n";
-		SSL_ShowCertificate(mSSL, CLIENT_SOCKET);
+		sslShowCertificate(mSSL, CLIENT_SOCKET);
 	}
 	mActive = true;
 
@@ -336,7 +336,7 @@ int SecureSocket::Send(char *data, int length) {
 }
 
 
-int SecureSocket::RecvFromSslSock(SSL *ssl, char *data, int len) {
+int SecureSocket::recvFromSslSock(SSL *ssl, char *data, int len) {
 	int rcnt = 0;
 	int totalcnt = 0;
 
@@ -373,11 +373,11 @@ int SecureSocket::RecvFromSslSock(SSL *ssl, char *data, int len) {
 
 
 int SecureSocket::Recv(char *data, int max_len) {
-	return RecvFromSslSock(mSSL, data, max_len);
+	return recvFromSslSock(mSSL, data, max_len);
 }
 
 
-void* SecureSocket::RxThread(void *arg) {
+void* SecureSocket::rxThread(void *arg) {
 	struct RxObj *rxo;
 	int rcnt = 0;
 
@@ -388,7 +388,7 @@ void* SecureSocket::RxThread(void *arg) {
 	}
 
 	// receive one chunk of data
-	rcnt = RecvFromSslSock(rxo->ssl, rxo->data, rxo->max_len);
+	rcnt = recvFromSslSock(rxo->ssl, rxo->data, rxo->max_len);
 
 	// pass back the data over callback function
 	rxo->cb(rxo->data, rcnt);
@@ -410,7 +410,7 @@ int SecureSocket::RecvAsync(char *data, int max_len, RvCbFunc *cb) {
 	rx_obj->cb 		= cb;
 	rx_obj->ssl 	= mSSL;
 
-	if (pthread_create(&rx_thread, NULL, this->RxThread, rx_obj)) {
+	if (pthread_create(&rx_thread, NULL, this->rxThread, rx_obj)) {
 		std::cout << __func__ << "Error creating rx thread!\n";
 		return -1;
 	}

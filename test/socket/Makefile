@@ -2,24 +2,25 @@
 
 # constants
 
+CLASSPATH = ../../classes
 MKDIR = mkdir -p
 COPY = cp -r
 CC = g++
 
 
-LOCAL_IFLAGS = -I. -I../classes
-LOCAL_CFLAGS = -Wall -g -std=c++11 ${LOCAL_IFLAGS} ${GLOBAL_IFLAGS}
-LOCAL_LFLAGS = -std=c++11 ${GLOBAL_LFLAGS}
+LOCAL_IFLAGS = -I. -I${CLASSPATH}
+LOCAL_CFLAGS = -Wall -g -std=c++11 ${LOCAL_IFLAGS}
+LOCAL_LFLAGS = -std=c++11 -lssl -lcrypto -L/usr/local/opt/openssl/lib
 
 
 
 # objects: that is compiler outputs
 client_objects = 	Client.o \
-					../classes/SecureSocket.o \
+				    ${CLASSPATH}/SecureSocket.o \
 
 
 server_objects = 	Server.o \
-					../classes/SecureSocket.o \
+					${CLASSPATH}/SecureSocket.o \
 
 
 %.o: %.cpp
