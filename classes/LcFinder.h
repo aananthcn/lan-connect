@@ -17,8 +17,8 @@ namespace LanConnect {
 	public:
 		LcFinder();
 		~LcFinder();
-		int StartSearch();
-		int StopSearch();
+		int EnterSearchMode();
+		int ShutdownLcFinder();
 
 	private:
 		SecureSocket *pServer;
@@ -29,6 +29,7 @@ namespace LanConnect {
 		static void* lcServerThread(void *arg);
 		int addLocalIPsToList();
 		int scanForRemoteLcFinder(struct in_addr *ip);
+		int enterActiveMode();
 	};
 
 }

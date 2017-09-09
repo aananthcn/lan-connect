@@ -75,9 +75,11 @@ namespace LanConnect {
 		std::string *mSecPath; 			// path to certificats and keys
 		SSL_CTX  *mCTX;
 		SSL *mSSL;
+		int mConnfd;
 		static std::mutex mSslMutex;
 		static bool mSslInitDone;
-		bool mActive;
+		bool mServerActive;
+		bool mClientActive;
 
 		SSL_CTX* sslInitContext(enum eSocketType role);
 		int sslLoadCertificate(SSL_CTX *ctx);
@@ -86,6 +88,7 @@ namespace LanConnect {
 		void sBind(int fd, const struct sockaddr *sa, socklen_t salen);
 		void sListen(int fd, int backlog);
 		SigFunc* sSignal(int signo, SigFunc *func);
+		void CloseConnection(const char *soc_str);
 
 		static void* rxThread(void *arg);
 		static int recvFromSslSock(SSL *ssl, char *data, int len);

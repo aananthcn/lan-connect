@@ -15,7 +15,7 @@ using namespace LanConnect;
 
 
 LcFinder::LcFinder() {
-	pServer = new SecureSocket("../../security");
+	pServer = new SecureSocket("../../resources");
 	pClient = new SecureSocket;
 	searchActive = false;
 }
@@ -48,7 +48,8 @@ void* LcFinder::lcServerThread(void *arg) {
 	std::cout << __func__ << "(): starting server thread...\n";
 
 	do {
-		self->pServer->OpenConnection();
+		if(self->pServer->OpenConnection() < 0)
+			break;
 	} while (self->searchActive);
 
 	self->pServer->CloseConnection();
@@ -59,7 +60,7 @@ void* LcFinder::lcServerThread(void *arg) {
 }
 
 
-int LcFinder::StopSearch() {
+int LcFinder::ShutdownLcFinder() {
 	searchActive = false;
 
 	return 0;
@@ -121,16 +122,21 @@ int LcFinder::scanForRemoteLcFinder(struct in_addr *ip) {
 		inet_ntop(AF_INET, ip, ip_str, INET_ADDRSTRLEN);
 
 		if(0 == pClient->Connect(ip_str)) {
-			std::cout << "Connected! : " << ip_str << " ...\n";
-			pClient->Disconnect();
+			std::cout << "Connected to \"" << ip_str << "\"!\n";
 		}
+		pClient->Disconnect();
 	}
 
 	return 0;
 }
 
 
-int LcFinder::StartSearch() {
+int LcFinder::enterActiveMode() {
+	std::cout << __func__ << "();\n";
+	return 0;
+}
+
+int LcFinder::EnterSearchMode() {
 	pthread_t server_thread;
 
 	searchActive = true;
@@ -145,6 +151,8 @@ int LcFinder::StartSearch() {
 	for (auto ip : iplist) {
 		scanForRemoteLcFinder(ip);
 	}
+
+	enterActiveMode();
 
 	return 0;
 }
