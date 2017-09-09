@@ -5,7 +5,12 @@
 
 using namespace LanConnect;
 
+// static member variable definitions
+bool SecureSocket::mSslInitDone = false;
+std::mutex SecureSocket::mSslMutex;
 
+
+// member function definitions
 SecureSocket::SecureSocket() {
 	mSecPath = new std::string("./");
 	mActive = false;
@@ -71,13 +76,18 @@ SSL_CTX* SecureSocket::sslInitContext(enum eSocketType role) {
 	const SSL_METHOD *method;
 	SSL_CTX *ctx;
 
-	SSL_library_init();
+	mSslMutex.lock();
+	if (mSslInitDone == false) {
+		mSslInitDone = true;
+		SSL_library_init();
 
     /* load & register all cryptos, etc. */
-	OpenSSL_add_all_algorithms();
+		OpenSSL_add_all_algorithms();
 
     /* load all error messages */
-	SSL_load_error_strings();
+		SSL_load_error_strings();
+	}
+	mSslMutex.unlock();
 
 	if (role == SERVER_SOCKET) {
     	/* create new server-method instance */
@@ -86,7 +96,6 @@ SSL_CTX* SecureSocket::sslInitContext(enum eSocketType role) {
 	else {
 		/* create new client-method instance */
 		method = TLSv1_2_client_method();
-
 	}
 
     /* create new context from method */
@@ -105,6 +114,10 @@ int SecureSocket::sslLoadCertificate(SSL_CTX *ctx) {
 	char KeyFileName[] = "private.pem";
 	char CertFile[512];
 	char KeyFile[512];
+
+	if ((ctx == NULL) || (mSecPath == NULL)) {
+		return -1;
+	}
 
 	// verify security files
 	sprintf(CertFile, "%s/%s", mSecPath->c_str(), CertFileName);
@@ -184,24 +197,19 @@ void SecureSocket::sslShowCertificate(SSL *ssl, enum eSocketType role) {
 }
 
 
-int SecureSocket::Open() {
+int SecureSocket::OpenConnection() {
 	int                     listenfd, connfd;
 	int                     en = 1;
 	socklen_t               clilen;
 	struct sockaddr_in      cliaddr, servaddr;
 	void sig_chld(int);
 
-
 	mCTX = sslInitContext(SERVER_SOCKET);
 	if (mCTX == NULL)
 		return -1;
 
-#if 0
 	if (0 > sslLoadCertificate(mCTX))
 		return -1;
-#else
-	sslLoadCertificate(mCTX);
-#endif
 
 	listenfd = sSocket(AF_INET, SOCK_STREAM, 0);
 	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &en, sizeof(int)) < 0)
@@ -242,7 +250,7 @@ int SecureSocket::Open() {
 }
 
 
-void SecureSocket::Close() {
+void SecureSocket::CloseConnection() {
 	int currfd;
 
 	if ((mCTX == NULL) || (mSSL == NULL)) {
@@ -272,9 +280,14 @@ int SecureSocket::Connect(const char *ip) {
 	return Connect(ip, SERV_PORT);
 }
 
+void SecureSocket::sigAlarm(int sig) {
+	//std::cout << __func__ << "()\n";
+}
+
 int SecureSocket::Connect(const char *ip, int port) {
 	int sockfd;
 	struct sockaddr_in servaddr;
+	SigFunc *sigfunc;
 
 	if (ip == NULL) {
 		std::cout << __func__ << ": invalid input!\n";
@@ -292,20 +305,37 @@ int SecureSocket::Connect(const char *ip, int port) {
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_port = htons(port);
-	if (inet_pton(AF_INET, ip, &servaddr.sin_addr) < 0)
+	if (inet_pton(AF_INET, ip, &servaddr.sin_addr) < 0) {
 		std::cout << "inet_pton error for port: " << port << "\n";
+		return -1;
+	}
 
-	std::cout << "connecting to " << ip << "\n";
-	if (connect(sockfd, (SA *) &servaddr, sizeof(servaddr)) < 0)
-		std::cout << __func__ << ": connect error\n";
+	// set timeout for connect call
+	sigfunc = sSignal(SIGALRM, sigAlarm);
+	if (ualarm(100*1000, 0)) // 1st in usec, 2nd interval is off
+		std::cout << __func__ << "(): alarm was already set\n";
+
+	if (connect(sockfd, (SA *) &servaddr, sizeof(servaddr)) < 0) {
+		if (errno == EINTR)
+			errno = ETIMEDOUT;
+		else {
+			std::cout << __func__ << "(): connect error - " << strerror(errno) << " (" << ip << ")\n";
+		}
+
+		return -1;
+	}
+	ualarm(0, 0);
+	sSignal(SIGALRM, sigfunc); // restore previous signal handler
 
     // convert to a secure socket
 	mSSL = SSL_new(mCTX);
 	SSL_set_fd(mSSL, sockfd);
 
     // perform the connection
-	if(SSL_connect(mSSL) == -1)
+	if(SSL_connect(mSSL) == -1) {
 		ERR_print_errors_fp(stderr);
+		return -1;
+	}
 	else {
 		std::cout << "\nStart of SecureSocket (client) session\n";
 		sslShowCertificate(mSSL, CLIENT_SOCKET);
@@ -317,7 +347,7 @@ int SecureSocket::Connect(const char *ip, int port) {
 
 
 void SecureSocket::Disconnect() {
-	Close();
+	CloseConnection();
 }
 
 

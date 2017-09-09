@@ -2,6 +2,7 @@
 #define SECURE_SOCKET_H
 
 #include <string>
+#include <mutex>
 
 extern "C" {
 	#include <netinet/in.h>
@@ -63,17 +64,19 @@ namespace LanConnect {
 		int Recv(char *data, int max_len);
 		int RecvAsync(char *data, int max_len, RvCbFunc *cb);
 
-		int Open();						// server functions
-		void Close();
+		int OpenConnection();			// server functions
+		void CloseConnection();
 
 		int Connect(const char *ip);	// client functions
 		int Connect(const char *ip, int port);
 		void Disconnect();
 
 	private:
+		std::string *mSecPath; 			// path to certificats and keys
 		SSL_CTX  *mCTX;
 		SSL *mSSL;
-		std::string *mSecPath; 			// path to certificats and keys
+		static std::mutex mSslMutex;
+		static bool mSslInitDone;
 		bool mActive;
 
 		SSL_CTX* sslInitContext(enum eSocketType role);
@@ -86,6 +89,7 @@ namespace LanConnect {
 
 		static void* rxThread(void *arg);
 		static int recvFromSslSock(SSL *ssl, char *data, int len);
+		static void sigAlarm(int sig);
 	};
 
 }

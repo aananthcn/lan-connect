@@ -10,7 +10,7 @@ CC = g++
 
 LOCAL_IFLAGS = -I. -I${CLASSPATH}
 LOCAL_CFLAGS = -Wall -g -std=c++11 ${LOCAL_IFLAGS}
-LOCAL_LFLAGS = -std=c++11 -lssl -lcrypto -L/usr/local/opt/openssl/lib
+LOCAL_LFLAGS = -g -std=c++11 -lssl -lcrypto -L/usr/local/opt/openssl/lib
 
 
 

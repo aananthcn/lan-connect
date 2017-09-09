@@ -17,7 +17,7 @@ int main(void)
 	SecureSocket ssk("../../security");
 	char buffer[512];
 
-	if (ssk.Open() < 0) {
+	if (ssk.OpenConnection() < 0) {
 		std::cout << "Unable to create server socket\n";
 		return -1;
 	}
@@ -33,7 +33,7 @@ int main(void)
 
 	sleep(5);
 
-	ssk.Close();
+	ssk.CloseConnection();
 
 	return 0;
 }

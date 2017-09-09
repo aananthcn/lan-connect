@@ -27,7 +27,8 @@ namespace LanConnect {
 		std::list<struct in_addr *> iplist;
 
 		static void* lcServerThread(void *arg);
-		int getLocalIPs();
+		int addLocalIPsToList();
+		int scanForRemoteLcFinder(struct in_addr *ip);
 	};
 
 }
