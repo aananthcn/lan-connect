@@ -17,7 +17,7 @@ SecureSocket::SecureSocket() {
 	mClientActive = false;
 	mCTX = NULL;
 	mSSL = NULL;
-	mConnfd = -1;
+	mListenfd = -1;
 }
 
 SecureSocket::SecureSocket(const char *sec_path) {
@@ -26,7 +26,7 @@ SecureSocket::SecureSocket(const char *sec_path) {
 	mClientActive = false;
 	mCTX = NULL;
 	mSSL = NULL;
-	mConnfd = -1;
+	mListenfd = -1;
 }
 
 
@@ -35,29 +35,36 @@ SecureSocket::~SecureSocket() {
 	delete mSecPath;
 
 	if (mServerActive) {
-		std::cout << "warning: application is not closing server Socket properly!\n";
-		CloseConnection();
+		mServerActive = false;
+
+		std::cout << "warning: application is not closing server Socket (" << this << ") properly!\n";
+		CloseConnection(-1);
+
+		// closing listening socket
+		if (mListenfd != -1) {
+			std::cout << "closing listening socket \n";
+			#if TILL_YOU_FIX_CLOSE_OF_MLISTENFD_ISSUE
+			if (close(mListenfd) == -1)
+				std::cout << "closing error \n\n";
+			#endif
+		}
 	}
 
 	if (mClientActive) {
-		std::cout << "warning: application is not closing client Socket properly!\n";
-		Disconnect();
+		mClientActive = false;
+		std::cout << "warning: application is not closing client Socket (" << this << ") properly!\n";
+		Disconnect(-1);
 	}
+
+	std::cout << "SecureSocket object destroyed!!\n";
 }
 
 
-void SecureSocket::CloseConnection(const char *soc_str) {
+void SecureSocket::closeConnection(const char *soc_str) {
 	if (mSSL) {
     	// clean up ssl
 		SSL_free(mSSL);
 		mSSL = NULL;
-	}
-
-	if (mConnfd > 0) {
-		if (close(mConnfd) == -1) {
-    		/* parent closes connected socket */
-			std::cout << "close error";
-		}
 	}
 
 	if (mCTX) {
@@ -67,22 +74,36 @@ void SecureSocket::CloseConnection(const char *soc_str) {
 }
 
 
-void SecureSocket::CloseConnection() {
-	CloseConnection("Server");
-
+void SecureSocket::CloseConnection(int connfd) {
 	if (mServerActive) {
 		std::cout << "SecureSocket Session (Server) Ended!\n";
 		mServerActive = false;
 	}
+
+	closeConnection("Server");
+
+	if (connfd > 0) {
+		if (close(connfd) == -1) {
+    		/* parent closes connected socket */
+			std::cout << "close error";
+		}
+	}
 }
 
 
-void SecureSocket::Disconnect() {
-	CloseConnection("Client");
-
+void SecureSocket::Disconnect(int connfd) {
 	if (mClientActive) {
-		std::cout << "SecureSocket Session (Server) Ended!\n";
+		std::cout << "SecureSocket Session (Client) Ended!\n";
 		mClientActive = false;
+	}
+
+	closeConnection("Client");
+
+	if (connfd > 0) {
+		if (close(connfd) == -1) {
+    		/* parent closes connected socket */
+			std::cout << "close error";
+		}
 	}
 }
 
@@ -92,7 +113,7 @@ int SecureSocket::sSocket(int family, int type, int protocol)
 	int n;
 
 	if((n = socket(family, type, protocol)) < 0)
-		std::cout << "socket error";
+		std::cout << "socket error\n\n";
 
 	return (n);
 }
@@ -101,7 +122,7 @@ int SecureSocket::sSocket(int family, int type, int protocol)
 void SecureSocket::sBind(int fd, const struct sockaddr *sa, socklen_t salen)
 {
 	if(bind(fd, sa, salen) < 0)
-		std::cout << "bind error";
+		std::cout << "bind error\n\n";
 }
 
 
@@ -114,7 +135,7 @@ void SecureSocket::sListen(int fd, int backlog)
 		backlog = atoi(ptr);
 
 	if(listen(fd, backlog) < 0)
-		std::cout << "listen error";
+		std::cout << "listen error\n\n";
 }
 
 
@@ -123,7 +144,7 @@ SigFunc* SecureSocket::sSignal(int signo, SigFunc *func)        /* for our signa
 	SigFunc *sigfunc;
 
 	if((sigfunc = signal(signo, func)) == SIG_ERR)
-		std::cout << "signal error";
+		std::cout << "signal error\n\n";
 
 	return (sigfunc);
 }
@@ -232,7 +253,7 @@ void SecureSocket::sslShowCertificate(SSL *ssl, enum eSocketType role) {
 	}
 
 	if(cert != NULL) {
-		std::cout << caller << " certificate:\n";
+		std::cout << callee << " certificate:\n";
 		line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
 		std::cout << "\tSubject: " << line << "\n";
 		free(line);
@@ -255,46 +276,44 @@ void SecureSocket::sslShowCertificate(SSL *ssl, enum eSocketType role) {
 
 
 int SecureSocket::OpenConnection() {
-	int                     listenfd;
+	int connfd;
 	int                     en = 1;
 	socklen_t               clilen;
 	struct sockaddr_in      cliaddr, servaddr;
 	void sig_chld(int);
 
-	mCTX = sslInitContext(SERVER_SOCKET);
-	if (mCTX == NULL)
-		return -1;
 
-	if (0 > sslLoadCertificate(mCTX))
-		return -1;
+	if (!mServerActive) {
+		mCTX = sslInitContext(SERVER_SOCKET);
+		if (mCTX == NULL)
+			return -1;
 
-	listenfd = sSocket(AF_INET, SOCK_STREAM, 0);
-	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &en, sizeof(int)) < 0)
-		std::cout << "setsockopt(SO_REUSEADDR) failed\n";
+		if (0 > sslLoadCertificate(mCTX))
+			return -1;
 
-	// bind a socket and listen for connections
-	bzero(&servaddr, sizeof(servaddr));
-	servaddr.sin_family      = AF_INET;
-	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	servaddr.sin_port        = htons(SERV_PORT);
-	sBind(listenfd, (SA *) &servaddr, sizeof(servaddr));
-	sListen(listenfd, LISTENQ); // check LISTENQ to increase more clients
-	std::cout << "listening for incoming socket...\n";
+		mListenfd = sSocket(AF_INET, SOCK_STREAM, 0);
+		if (setsockopt(mListenfd, SOL_SOCKET, SO_REUSEADDR, &en, sizeof(int)) < 0)
+			std::cout << "setsockopt(SO_REUSEADDR) failed\n";
 
-	//  accept conn. based on listenfd and create new socket - mConnfd
-	if((mConnfd = accept(listenfd, (SA *) &cliaddr, &clilen)) < 0) {
-		if (errno != EINTR)
-			std::cout << "accept error";
+		// bind a socket and listen for connections
+		bzero(&servaddr, sizeof(servaddr));
+		servaddr.sin_family      = AF_INET;
+		servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		servaddr.sin_port        = htons(SERV_PORT);
+		sBind(mListenfd, (SA *) &servaddr, sizeof(servaddr));
+		sListen(mListenfd, LISTENQ); // check LISTENQ to increase more clients
+		std::cout << "listening for incoming socket...\n";
 	}
 
-	// close the listening socket as it is no longer required
-	if(close(listenfd) == -1) {
-		std::cout << "close error";
+	//  accept conn. based on mListenfd and create new socket - mConnfd
+	if((connfd = accept(mListenfd, (SA *) &cliaddr, &clilen)) < 0) {
+		if (errno != EINTR)
+			std::cout << "accept error\n\n";
 	}
 
     // convert mConnfd to a secure socket
 	mSSL = SSL_new(mCTX);
-	SSL_set_fd(mSSL, mConnfd);
+	SSL_set_fd(mSSL, connfd);
 	if(-1 == SSL_accept(mSSL))
 		ERR_print_errors_fp(stderr);
 
@@ -303,7 +322,7 @@ int SecureSocket::OpenConnection() {
 	sslShowCertificate(mSSL, SERVER_SOCKET);
 	mServerActive = true;
 
-	return 0;
+	return connfd;
 }
 
 
@@ -317,6 +336,7 @@ int SecureSocket::Connect(const char *ip) {
 }
 
 int SecureSocket::Connect(const char *ip, int port) {
+	int connfd;
 	struct sockaddr_in servaddr;
 	SigFunc *sigfunc;
 
@@ -331,7 +351,7 @@ int SecureSocket::Connect(const char *ip, int port) {
 		return -1;
 	}
 
-	mConnfd = sSocket(AF_INET, SOCK_STREAM, 0);
+	connfd = sSocket(AF_INET, SOCK_STREAM, 0);
 
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
@@ -346,7 +366,7 @@ int SecureSocket::Connect(const char *ip, int port) {
 	if (ualarm(200*1000, 0)) // 1st in usec, 2nd interval is off
 		std::cout << __func__ << "(): alarm was already set\n";
 
-	if (connect(mConnfd, (SA *) &servaddr, sizeof(servaddr)) < 0) {
+	if (connect(connfd, (SA *) &servaddr, sizeof(servaddr)) < 0) {
 		if (errno == EINTR) {
 			errno = ETIMEDOUT;
 			ualarm(0, 0);
@@ -363,7 +383,7 @@ int SecureSocket::Connect(const char *ip, int port) {
 
     // convert to a secure socket
 	mSSL = SSL_new(mCTX);
-	SSL_set_fd(mSSL, mConnfd);
+	SSL_set_fd(mSSL, connfd);
 
     // perform the connection
 	if(SSL_connect(mSSL) == -1) {
@@ -376,7 +396,7 @@ int SecureSocket::Connect(const char *ip, int port) {
 	}
 	mClientActive = true;
 
-	return 0;
+	return connfd;
 }
 
 

@@ -9,8 +9,9 @@ int main(void)
 {
 	SecureSocket ssk;
 	char buffer[512];
+	int connfd;
 
-	ssk.Connect("localhost");
+	connfd = ssk.Connect("localhost");
 
 	sprintf(buffer, "Hello Server!!");
 	ssk.Send(buffer, strlen(buffer));
@@ -20,7 +21,7 @@ int main(void)
 	sprintf(buffer, "Thank you! I received the data!");
 	ssk.Send(buffer, strlen(buffer));
 
-	ssk.Disconnect();
+	ssk.Disconnect(connfd);
 
 	return 0;
 }

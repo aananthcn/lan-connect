@@ -15,18 +15,19 @@ using namespace LanConnect;
 
 
 LcFinder::LcFinder() {
-	pServer = new SecureSocket("../../resources");
-	pClient = new SecureSocket;
+	pServer = NULL;
+	pClient = new SecureSocket();
 	searchActive = false;
 }
 
 
 LcFinder::~LcFinder() {
-	if (pServer) {
-		delete pServer;
-	}
 	if (pClient) {
 		delete pClient;
+	}
+
+	if (pServer) {
+		delete pServer;
 	}
 
 	while (iplist.empty() != true) {
@@ -36,32 +37,29 @@ LcFinder::~LcFinder() {
 }
 
 
-void* LcFinder::lcServerThread(void *arg) {
-	LcFinder *self;
-
-	self = (LcFinder *) arg;
-	if (self == NULL) {
-		std::cout << __func__ << "(): invalid argument!\n";
-		return NULL;
-	}
+void LcFinder::lcServerThread(SecureSocket *sskt, std::thread *thread) {
+	int connfd;
+	std::thread *child;
 
 	std::cout << __func__ << "(): starting server thread...\n";
+	connfd = sskt->OpenConnection();
+	if (connfd > 0) {
+		child = new std::thread(lcServerThread, std::ref(sskt), std::ref(child));
+	}
 
-	do {
-		if(self->pServer->OpenConnection() < 0)
-			break;
-	} while (self->searchActive);
+	// do your main server processing here
+	sleep(5);
 
-	self->pServer->CloseConnection();
+	sskt->CloseConnection(connfd);
+	delete thread;
 
 	std::cout << __func__ << "(): exiting server thread.\n";
-
-	return NULL;
 }
 
 
 int LcFinder::ShutdownLcFinder() {
 	searchActive = false;
+	usleep(100*1000); // wait for server thread to exit
 
 	return 0;
 }
@@ -108,6 +106,7 @@ int LcFinder::scanForRemoteLcFinder(struct in_addr *ip) {
 	char ip_str[INET_ADDRSTRLEN];
 	int shift_cnt, i;
 	unsigned int ip_base;
+	int connfd;
 
 #ifdef __BIG_ENDIAN__
 	ip_base = (ip->s_addr) & 0xFFFFFF00;
@@ -117,14 +116,16 @@ int LcFinder::scanForRemoteLcFinder(struct in_addr *ip) {
 	shift_cnt = 24;
 #endif
 
-	for (i = 2; i < 254; i++) {
+	//for (i = 2; i < 254; i++) {
+	for (i = 2; i < 25; i++) {
 		ip->s_addr = ip_base | (i << shift_cnt);
 		inet_ntop(AF_INET, ip, ip_str, INET_ADDRSTRLEN);
 
-		if(0 == pClient->Connect(ip_str)) {
+		connfd = pClient->Connect(ip_str);
+		if(connfd > 0) {
 			std::cout << "Connected to \"" << ip_str << "\"!\n";
 		}
-		pClient->Disconnect();
+		pClient->Disconnect(connfd);
 	}
 
 	return 0;
@@ -137,17 +138,16 @@ int LcFinder::enterActiveMode() {
 }
 
 int LcFinder::EnterSearchMode() {
-	pthread_t server_thread;
+	std::thread *sthread;
 
 	searchActive = true;
 
-	if (pthread_create(&server_thread, NULL, this->lcServerThread, this)) {
-		std::cout << __func__ << "Error creating server thread!\n";
-		return -1;
-	}
+	// start a server thread as per LanConnect protocol
+	pServer = new SecureSocket("../../resources");
+	sthread = new std::thread(lcServerThread, std::ref(pServer), std::ref(sthread));
 
+	// from the main thread, start scanning other LanConnect nodes as per protocol
 	addLocalIPsToList();
-
 	for (auto ip : iplist) {
 		scanForRemoteLcFinder(ip);
 	}
