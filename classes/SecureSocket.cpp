@@ -2,11 +2,16 @@
 
 #include "SecureSocket.h"
 
+extern "C" {
+	#include <sys/ioctl.h>
+}
+
 
 using namespace LanConnect;
 
 // static member variable definitions
 bool SecureSocket::mSslInitDone = false;
+bool SecureSocket::mStopServer = false;
 std::mutex SecureSocket::mSslMutex;
 
 
@@ -105,6 +110,17 @@ void SecureSocket::Disconnect(int connfd) {
 			std::cout << "close error";
 		}
 	}
+}
+
+
+void SecureSocket::sigAlarm(int sig) {
+	//std::cout << __func__ << "()\n";
+}
+
+
+int SecureSocket::StopConnections(void) {
+	mStopServer = true;
+	return 0;
 }
 
 
@@ -276,12 +292,11 @@ void SecureSocket::sslShowCertificate(SSL *ssl, enum eSocketType role) {
 
 
 int SecureSocket::OpenConnection() {
-	int connfd;
+	int 					connfd = -1;
 	int                     en = 1;
 	socklen_t               clilen;
 	struct sockaddr_in      cliaddr, servaddr;
 	void sig_chld(int);
-
 
 	if (!mServerActive) {
 		mCTX = sslInitContext(SERVER_SOCKET);
@@ -292,7 +307,7 @@ int SecureSocket::OpenConnection() {
 			return -1;
 
 		mListenfd = sSocket(AF_INET, SOCK_STREAM, 0);
-		if (setsockopt(mListenfd, SOL_SOCKET, SO_REUSEADDR, &en, sizeof(int)) < 0)
+		if (setsockopt(mListenfd, SOL_SOCKET, SO_REUSEADDR, &en, sizeof(en)) < 0)
 			std::cout << "setsockopt(SO_REUSEADDR) failed\n";
 
 		// bind a socket and listen for connections
@@ -305,11 +320,40 @@ int SecureSocket::OpenConnection() {
 		std::cout << "listening for incoming socket...\n";
 	}
 
-	//  accept conn. based on mListenfd and create new socket - mConnfd
-	if((connfd = accept(mListenfd, (SA *) &cliaddr, &clilen)) < 0) {
-		if (errno != EINTR)
-			std::cout << "accept error\n\n";
-	}
+	do {
+		int rv;
+		fd_set fdset;
+		struct timeval timeout;
+
+		FD_ZERO(&fdset); /* clear the set */
+		FD_SET(mListenfd, &fdset); /* add our file descriptor to the set */
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 500*1000; // 100 ms
+
+		// block until input arrives on one or more active sockets
+		rv = select(mListenfd+1, &fdset, NULL, NULL, &timeout);
+		if (rv < 0) {
+	    	perror("select"); /* an error accured */
+	    	return -1;
+		}
+		else if (rv == 0) {
+		}
+		else {
+			if (FD_ISSET(mListenfd, &fdset)) {
+				//  accept conn. based on mListenfd and create new socket - mConnfd
+				if((connfd = accept(mListenfd, (SA *) &cliaddr, &clilen)) < 0) {
+					if (errno != EINTR) {
+						std::cout << "accept error\n\n";
+					}
+					return -1;
+				}
+				break;
+			}
+			else {
+				std::cout << "warning: ignoring a socket as it is non intented to this server\n";
+			}
+		}
+	} while (!mStopServer);
 
     // convert mConnfd to a secure socket
 	mSSL = SSL_new(mCTX);
@@ -323,11 +367,6 @@ int SecureSocket::OpenConnection() {
 	mServerActive = true;
 
 	return connfd;
-}
-
-
-void SecureSocket::sigAlarm(int sig) {
-	//std::cout << __func__ << "()\n";
 }
 
 

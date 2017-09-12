@@ -32,8 +32,10 @@ int main(void)
 	std::cout << "Calling RecvAsync() ... \n";
 	ssk.RecvAsync(buffer, sizeof(buffer), rx_callback);
 
+	std::cout << "Entering 5 sec sleep\n";
 	sleep(5);
 
+	ssk.StopConnections();
 	ssk.CloseConnection(connfd);
 
 	return 0;

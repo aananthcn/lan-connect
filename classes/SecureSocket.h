@@ -65,6 +65,7 @@ namespace LanConnect {
 		int RecvAsync(char *data, int max_len, RvCbFunc *cb);
 
 		int OpenConnection();			// server functions
+		int StopConnections();
 		void CloseConnection(int connfd);
 
 		int Connect(const char *ip);	// client functions
@@ -76,8 +77,6 @@ namespace LanConnect {
 		SSL_CTX  *mCTX;
 		SSL *mSSL;
 		int mListenfd;
-		static std::mutex mSslMutex;
-		static bool mSslInitDone;
 		bool mServerActive;
 		bool mClientActive;
 
@@ -89,6 +88,10 @@ namespace LanConnect {
 		void sListen(int fd, int backlog);
 		SigFunc* sSignal(int signo, SigFunc *func);
 		void closeConnection(const char *soc_str);
+
+		static std::mutex mSslMutex;
+		static bool mSslInitDone;
+		static bool mStopServer;
 
 		static void* rxThread(void *arg);
 		static int recvFromSslSock(SSL *ssl, char *data, int len);
