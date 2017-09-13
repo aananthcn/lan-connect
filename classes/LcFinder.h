@@ -22,15 +22,17 @@ namespace LanConnect {
 		int ShutdownLcFinder();
 
 	private:
-		SecureSocket *pClient;
-		SecureSocket *pServer;
-		bool searchActive;
+		SecureSocket *mClientSocket;
+		SecureSocket *mServerSocket;
+		std::thread  *mServerThread;
 		std::list<struct in_addr *> iplist;
 
-		static void lcServerThread(SecureSocket *sskt, std::thread *thread);
 		int addLocalIPsToList();
 		int scanForRemoteLcFinder(struct in_addr *ip);
 		int enterActiveMode();
+
+		static bool mSearchActive;
+		static void lcServerThread(SecureSocket *sskt);
 	};
 
 }

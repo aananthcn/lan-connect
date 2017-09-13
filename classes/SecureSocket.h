@@ -72,6 +72,8 @@ namespace LanConnect {
 		int Connect(const char *ip, int port);
 		void Disconnect(int connfd);
 
+		int CloseListenFd();
+
 	private:
 		std::string *mSecPath; 			// path to certificats and keys
 		SSL_CTX  *mCTX;

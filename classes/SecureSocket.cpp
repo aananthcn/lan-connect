@@ -64,6 +64,10 @@ SecureSocket::~SecureSocket() {
 	std::cout << "SecureSocket object destroyed!!\n";
 }
 
+int SecureSocket::CloseListenFd() {
+	return close(mListenfd);
+}
+
 
 void SecureSocket::closeConnection(const char *soc_str) {
 	if (mSSL) {
@@ -354,6 +358,9 @@ int SecureSocket::OpenConnection() {
 			}
 		}
 	} while (!mStopServer);
+	if (mStopServer) {
+		return -1;
+	}
 
     // convert mConnfd to a secure socket
 	mSSL = SSL_new(mCTX);

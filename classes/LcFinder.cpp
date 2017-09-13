@@ -14,20 +14,28 @@ extern "C" {
 using namespace LanConnect;
 
 
+bool LcFinder::mSearchActive = false;
+
+
 LcFinder::LcFinder() {
-	pServer = NULL;
-	pClient = new SecureSocket();
-	searchActive = false;
+	mServerSocket = NULL;
+	mClientSocket = new SecureSocket();
 }
 
 
 LcFinder::~LcFinder() {
-	if (pClient) {
-		delete pClient;
+	if (mServerThread) {
+		mServerThread->join();
+		delete mServerThread;
 	}
 
-	if (pServer) {
-		delete pServer;
+	if (mServerSocket) {
+		mServerSocket->StopConnections(); // to initiate stopping all server threads
+		delete mServerSocket;
+	}
+
+	if (mClientSocket) {
+		delete mClientSocket;
 	}
 
 	while (iplist.empty() != true) {
@@ -37,28 +45,36 @@ LcFinder::~LcFinder() {
 }
 
 
-void LcFinder::lcServerThread(SecureSocket *sskt, std::thread *thread) {
+void LcFinder::lcServerThread(SecureSocket *sskt) {
 	int connfd;
-	std::thread *child;
 
 	std::cout << __func__ << "(): starting server thread...\n";
-	connfd = sskt->OpenConnection();
-	if (connfd > 0) {
-		child = new std::thread(lcServerThread, std::ref(sskt), std::ref(child));
-	}
+	do {
+		connfd = sskt->OpenConnection();
+		if (connfd > 0) {
+			if (0 == fork()) {
+				std::cout << "Got a connection, creating a child process to handle the current socket\n";
+				sskt->CloseListenFd(); // we no longer need this in this process space
 
-	// do your main server processing here
-	sleep(5);
+				// handle new connection
+				sleep(1);
 
-	sskt->CloseConnection(connfd);
-	delete thread;
+				std::cout << "Child process is going to exit!\n";
+				exit(0);
+			}
+			// close this connection as we have created a new process to handle that above.
+			sskt->CloseConnection(connfd);
+		}
+	} while (mSearchActive);
 
 	std::cout << __func__ << "(): exiting server thread.\n";
 }
 
 
 int LcFinder::ShutdownLcFinder() {
-	searchActive = false;
+	mServerSocket->StopConnections();
+	mSearchActive = false;
+	std::cout << __func__ << "() - usleep()\n";
 	usleep(100*1000); // wait for server thread to exit
 
 	return 0;
@@ -73,6 +89,7 @@ int LcFinder::addLocalIPsToList() {
 	inet_pton(AF_INET, "127.0.0.1", &localhost);
     getifaddrs(&ifAddrStruct);
 
+    std::cout << "finding the ip address of this machine...\n";
     for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
         if (!ifa->ifa_addr)
             continue;
@@ -90,7 +107,7 @@ int LcFinder::addLocalIPsToList() {
 
             	iplist.push_back(ipaddr);
             	inet_ntop(AF_INET, ipaddr, ip_str, INET_ADDRSTRLEN);
-            	std::cout << __func__ << "(): added " << ip_str << " to the list\n";
+            	std::cout << "Found " << ip_str << "! Adding to the iplist ...\n";
             }
         }
     }
@@ -116,17 +133,19 @@ int LcFinder::scanForRemoteLcFinder(struct in_addr *ip) {
 	shift_cnt = 24;
 #endif
 
+	std::cout << "Start of Remote Scan...\n";
 	//for (i = 2; i < 254; i++) {
 	for (i = 2; i < 25; i++) {
 		ip->s_addr = ip_base | (i << shift_cnt);
 		inet_ntop(AF_INET, ip, ip_str, INET_ADDRSTRLEN);
 
-		connfd = pClient->Connect(ip_str);
+		connfd = mClientSocket->Connect(ip_str);
 		if(connfd > 0) {
 			std::cout << "Connected to \"" << ip_str << "\"!\n";
+			mClientSocket->Disconnect(connfd);
 		}
-		pClient->Disconnect(connfd);
 	}
+	std::cout << "End of Remote Scan...\n";
 
 	return 0;
 }
@@ -138,13 +157,11 @@ int LcFinder::enterActiveMode() {
 }
 
 int LcFinder::EnterSearchMode() {
-	std::thread *sthread;
-
-	searchActive = true;
+	mSearchActive = true;
 
 	// start a server thread as per LanConnect protocol
-	pServer = new SecureSocket("../../resources");
-	sthread = new std::thread(lcServerThread, std::ref(pServer), std::ref(sthread));
+	mServerSocket = new SecureSocket("../../resources");
+	mServerThread = new std::thread(lcServerThread, std::ref(mServerSocket));
 
 	// from the main thread, start scanning other LanConnect nodes as per protocol
 	addLocalIPsToList();
@@ -153,6 +170,9 @@ int LcFinder::EnterSearchMode() {
 	}
 
 	enterActiveMode();
+	mSearchActive = false;
+	std::cout << "Reached end of client thread ...\n";
+	sleep(1); // wait for server threads to finish jobs
 
 	return 0;
 }

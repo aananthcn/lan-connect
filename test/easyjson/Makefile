@@ -15,7 +15,7 @@ LOCAL_LFLAGS = -g -std=c++11 -lssl -lcrypto -L/usr/local/opt/openssl/lib
 
 
 # objects: that is compiler outputs
-objects = 	LcFinderApp.o \
+objects = 	LcFind.o \
 			${CLASSPATH}/SecureSocket.o \
 			${CLASSPATH}/LcFinder.o
 
