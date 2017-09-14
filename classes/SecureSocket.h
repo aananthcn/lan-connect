@@ -81,6 +81,7 @@ namespace LanConnect {
 		int mListenfd;
 		bool mServerActive;
 		bool mClientActive;
+		bool mSocketInited;
 
 		SSL_CTX* sslInitContext(enum eSocketType role);
 		int sslLoadCertificate(SSL_CTX *ctx);

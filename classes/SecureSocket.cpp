@@ -20,6 +20,7 @@ SecureSocket::SecureSocket() {
 	mSecPath = new std::string("./");
 	mServerActive = false;
 	mClientActive = false;
+	mSocketInited = false;
 	mCTX = NULL;
 	mSSL = NULL;
 	mListenfd = -1;
@@ -29,6 +30,7 @@ SecureSocket::SecureSocket(const char *sec_path) {
 	mSecPath = new std::string(sec_path);
 	mServerActive = false;
 	mClientActive = false;
+	mSocketInited = false;
 	mCTX = NULL;
 	mSSL = NULL;
 	mListenfd = -1;
@@ -302,7 +304,7 @@ int SecureSocket::OpenConnection() {
 	struct sockaddr_in      cliaddr, servaddr;
 	void sig_chld(int);
 
-	if (!mServerActive) {
+	if (!mSocketInited) {
 		mCTX = sslInitContext(SERVER_SOCKET);
 		if (mCTX == NULL)
 			return -1;
@@ -369,6 +371,7 @@ int SecureSocket::OpenConnection() {
 		ERR_print_errors_fp(stderr);
 
 	// print certificates for server admin
+	mSocketInited = true;
 	std::cout << "Start of SecureSocket (server) session \n";
 	sslShowCertificate(mSSL, SERVER_SOCKET);
 	mServerActive = true;
@@ -437,6 +440,7 @@ int SecureSocket::Connect(const char *ip, int port) {
 		return -1;
 	}
 	else {
+		mSocketInited = true;
 		std::cout << "\nStart of SecureSocket (client) session\n";
 		sslShowCertificate(mSSL, CLIENT_SOCKET);
 	}
@@ -448,6 +452,11 @@ int SecureSocket::Connect(const char *ip, int port) {
 
 int SecureSocket::Send(char *data, int length) {
 	int bytes;
+
+	if (!mSocketInited) {
+		std::cout << "Send called before initializing the socket\n";
+		return -1;
+	}
 
 	if ((data == NULL) || (length < 1)) {
 		std::cout << __func__ << ": invalid inputs\n";
@@ -498,6 +507,11 @@ int SecureSocket::recvFromSslSock(SSL *ssl, char *data, int len) {
 
 
 int SecureSocket::Recv(char *data, int max_len) {
+	if (!mSocketInited) {
+		std::cout << "Recv called before initializing the socket\n";
+		return -1;
+	}
+
 	return recvFromSslSock(mSSL, data, max_len);
 }
 
@@ -527,6 +541,11 @@ void* SecureSocket::rxThread(void *arg) {
 int SecureSocket::RecvAsync(char *data, int max_len, RvCbFunc *cb) {
 	pthread_t rx_thread;
 	RxObj *rx_obj;
+
+	if (!mSocketInited) {
+		std::cout << "RecvAsync called before initializing the socket\n";
+		return -1;
+	}
 
 	// create new object on heap, copy data and pass to RxThread for use and delete
 	rx_obj = new RxObj;

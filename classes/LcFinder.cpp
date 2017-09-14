@@ -135,7 +135,7 @@ int LcFinder::scanForRemoteLcFinder(struct in_addr *ip) {
 
 	std::cout << "Start of Remote Scan...\n";
 	//for (i = 2; i < 254; i++) {
-	for (i = 2; i < 25; i++) {
+	for (i = 2; i < 254; i++) {
 		ip->s_addr = ip_base | (i << shift_cnt);
 		inet_ntop(AF_INET, ip, ip_str, INET_ADDRSTRLEN);
 
