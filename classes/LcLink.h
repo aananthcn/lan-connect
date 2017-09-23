@@ -43,6 +43,7 @@ namespace LanConnect {
 		int RegisterProtocol(T *proto);
 		int SearchLcNodes();
 		int PrintLcNodes();
+		int EnterActiveMode();
 		int ShutdownLcLink();
 
 	private:
@@ -56,10 +57,9 @@ namespace LanConnect {
 
 		int addLocalhostToList();
 		int scanForOtherHosts();
-		int enterActiveMode();
 
 		static bool mSearchActive;
-		static void lcServerThread(LcLink *link);
+		static void lcServerThread_SearchMode(LcLink *link);
 		static void serveClientConnection(void);
 	};
 
@@ -113,7 +113,7 @@ template <typename T>
 
 
 template <typename T>
-void LcLink<T>::lcServerThread(LcLink<T> *link) {
+void LcLink<T>::lcServerThread_SearchMode(LcLink<T> *link) {
 	int connfd;
 
 	std::cout << __func__ << "(): starting server thread...\n";
@@ -123,15 +123,16 @@ void LcLink<T>::lcServerThread(LcLink<T> *link) {
 			if (0 == fork()) {
 				std::cout << "Got a connection, creating a child process to handle the current socket\n";
 				link->mServerSocket->CloseListenFd(); // we no longer need this in this process space
+				#if 0 // handling incoming messages are not allowed in search mode
 				LcLinkPkt *lcpkt = new LcLinkPkt;
 
 				// handle new connection
 				if (link->mProtocol != NULL) {
 					link->mServerSocket->Recv((char *)&lcpkt, sizeof(LcLinkPkt));
 				}
-				sleep(1);
 
 				delete lcpkt;
+				#endif
 				std::cout << "Child process is going to exit!\n";
 				exit(0);
 			}
@@ -140,7 +141,7 @@ void LcLink<T>::lcServerThread(LcLink<T> *link) {
 		}
 	} while (mSearchActive);
 
-	std::cout << __func__ << "(): exiting server thread.\n";
+	std::cout << __func__ << "(): exiting thread!\n";
 }
 
 template <typename T>
@@ -247,7 +248,7 @@ int LcLink<T>::scanForOtherHosts(void) {
 
 
 template <typename T>
-int LcLink<T>::enterActiveMode() {
+int LcLink<T>::EnterActiveMode() {
 	std::cout << __func__ << "();\n";
 	return 0;
 }
@@ -259,13 +260,14 @@ int LcLink<T>::SearchLcNodes() {
 
 	// start a server thread as per LanConnect protocol
 	mServerSocket = new SecureSocket("../../resources");
-	mServerThread = new std::thread(lcServerThread, this);
+	mServerThread = new std::thread(lcServerThread_SearchMode, this);
 
 	// from the main thread, start scanning other LanConnect nodes as per protocol
 	addLocalhostToList();
 	scanForOtherHosts();
 
 	mSearchActive = false;
+	mServerSocket->StopConnections();
 	std::cout << "Finished searching LanConnect nodes ...\n";
 
 	if (mIpList.size() > 1) {
@@ -284,6 +286,7 @@ int LcLink<T>::PrintLcNodes() {
 	}
 
 	std::cout << "\nIP addresses scanned:\n";
+	std::cout << "---------------------\n";
 	for (auto ip: mIpList) {
 		if (i == 0)
 			std::cout << "  " << ip << " <== This node!\n";
