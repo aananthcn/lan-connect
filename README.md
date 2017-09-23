@@ -3,7 +3,7 @@ LanConnect will help connect devices securely and talk to each other with in a L
 It is composed of following classes
 
  1. SecureSocket - the name explains everything
- 2. LcFinder - does find all devices in a LAN
+ 2. LcLink - link layer, find all devices in a LAN
  3. EasyJson - a helper class to parse json files
  4. LanConnect - the main class that manages modes and protocol
 

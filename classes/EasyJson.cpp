@@ -6,6 +6,8 @@
  * Date: 10 July 2015
  */
 
+#include <iostream>
+
 extern "C" {
 	#include <stdio.h>
 	#include <sys/types.h>
@@ -19,15 +21,106 @@ extern "C" {
 
 #include "EasyJson.h"
 
+using namespace LanConnect;
+
 
 
 EasyJson::EasyJson() {
+	mDataPtr = NULL;
+	invalid = false;
+	mJroot = json_object();
+}
+
+EasyJson::EasyJson(const char *path) {
+	mDataPtr = NULL;
+	invalid = false;
+
+	if (load_file((char *)path, &mJroot) < 0) {
+		invalid = true;
+		std::cout << "Couldn't load file to json object\n";
+	}
 }
 
 EasyJson::~EasyJson() {
+	if (mDataPtr)
+		delete mDataPtr;
 
+	json_decref(mJroot);
 }
 
+int EasyJson::GetInt(const char *name, int *value) {
+	if (invalid) {
+		std::cout << __func__ << "(): failed as the json root object is invalid!\n";
+		*value = 0;
+		return -1;
+	}
+
+	return get_int(mJroot, (char *)name, value);
+}
+
+int EasyJson::SetInt(const char *name, int value) {
+	if (invalid) {
+		std::cout << __func__ << "(): failed as the json root object is invalid!\n";
+		return -1;
+	}
+	return set_int(mJroot, (char *)name, value);
+}
+
+int EasyJson::AddInt(const char *name, int value) {
+	if (invalid) {
+		std::cout << __func__ << "(): failed as the json root object is invalid!\n";
+		return -1;
+	}
+
+	return add_int(&mJroot, (char *)name, value);
+}
+
+
+int EasyJson::GetStr(const char *name, char *value) {
+	if (invalid) {
+		std::cout << __func__ << "(): failed as the json root object is invalid!\n";
+		*value = 0;
+		return -1;
+	}
+
+	return get_string(mJroot, (char *)name, value);
+}
+
+int EasyJson::SetStr(const char *name, char *value) {
+	if (invalid) {
+		std::cout << __func__ << "(): failed as the json root object is invalid!\n";
+		return -1;
+	}
+	return set_string(mJroot, (char *)name, value);
+}
+
+int EasyJson::AddStr(const char *name, char *value) {
+	if (invalid) {
+		std::cout << __func__ << "(): failed as the json root object is invalid!\n";
+		return -1;
+	}
+
+	return add_string(&mJroot, (char *)name, value);
+}
+
+int EasyJson::LoadFile(const char *path) {
+	json_decref(mJroot);
+	invalid = true;
+
+	if (load_file((char *)path, &mJroot) < 0) {
+		std::cout << "Couldn't load file to json object\n";
+		return -1;
+	}
+	else {
+		invalid = false;
+	}
+
+	return 0;
+}
+
+int EasyJson::SaveFile(const char *path) {
+	return store_file(mJroot, (char *)path);
+}
 
 /*                    E A S Y   J S O N   A P I ' S                     */
 
@@ -102,8 +195,8 @@ int EasyJson::load_file(char *file, json_t ** root)
 
 	json_error_t error;
 
-	if (!file) {
-		printf("%s(), invalid file passed!\n", __FUNCTION__);
+	if ((!file) || (access(file, F_OK) != 0)) {
+		printf("%s(), file '%s' is invalid!\n", __FUNCTION__, file);
 		return -1;
 	}
 
@@ -140,8 +233,10 @@ int EasyJson::store_file(json_t * root, char *file)
 	/* dump to a temporary file */
 	flags = JSON_INDENT(8);
 	ret = json_dump_file(root, file, flags);
-	if (ret < 0)
+	if (ret < 0) {
+		printf("%s(): writing to %s failed!!\n", __func__, file);
 		return -1;
+	}
 
 	return 0;
 }
@@ -259,34 +354,34 @@ int EasyJson::set_string(json_t * root, char *name, char *value)
 
 int EasyJson::add_int(json_t ** root, char *name, int value)
 {
-	json_t *new;
+	json_t *newj;
 
 	if (name == NULL) {
 		printf("%s(): invalid arguments!\n", __func__);
 		return -1;
 	}
 
-	new = json_pack("{\nsi\n}", name, value);
-	if (new == NULL)
+	newj = json_pack("{\nsi\n}", name, value);
+	if (newj == NULL)
 		return -1;
 
-	return json_object_update(*root, new);
+	return json_object_update(*root, newj);
 }
 
 int EasyJson::add_string(json_t ** root, char *name, char *value)
 {
-	json_t *new;
+	json_t *newj;
 
 	if ((name == NULL) || (value == NULL)) {
 		printf("%s(): invalid arguments!\n", __func__);
 		return -1;
 	}
 
-	new = json_pack("{\nss\n}", name, value);
-	if (new == NULL)
+	newj = json_pack("{\nss\n}", name, value);
+	if (newj == NULL)
 		return -1;
 
-	return json_object_update(*root, new);
+	return json_object_update(*root, newj);
 }
 
 
@@ -348,7 +443,7 @@ int EasyJson::get_array(json_t *jarray, int index, json_t **jrow)
 int EasyJson::free_ref(json_t *json)
 {
 	if (NULL == json) {
-		printf(" %s(): invalid arguements!\n", __func__);
+		printf(" %s(): invalid arguments!\n", __func__);
 		return -1;
 	}
 	json_decref(json);

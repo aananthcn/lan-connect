@@ -9,21 +9,24 @@ extern "C" {
 	#include <arpa/inet.h>
 }
 
-#include "LcFinder.h"
+#include "LcLink.h"
 
 using namespace LanConnect;
 
+#if 0
+template <typename T>
+bool LcLink<T>::mSearchActive = false;
 
-bool LcFinder::mSearchActive = false;
 
-
-LcFinder::LcFinder() {
+template <typename T>
+LcLink<T>::LcLink() {
 	mServerSocket = NULL;
 	mClientSocket = new SecureSocket();
 }
 
 
-LcFinder::~LcFinder() {
+template <typename T>
+LcLink<T>::~LcLink() {
 	if (mServerThread) {
 		mServerThread->join();
 		delete mServerThread;
@@ -45,25 +48,29 @@ LcFinder::~LcFinder() {
 }
 
 
-void LcFinder::lcServerThread(SecureSocket *sskt) {
+template <typename T>
+void LcLink<T>::lcServerThread(LcLink<T> *link) {
 	int connfd;
 
 	std::cout << __func__ << "(): starting server thread...\n";
 	do {
-		connfd = sskt->OpenConnection();
+		connfd = link->mServerSocket->OpenConnection();
 		if (connfd > 0) {
 			if (0 == fork()) {
 				std::cout << "Got a connection, creating a child process to handle the current socket\n";
-				sskt->CloseListenFd(); // we no longer need this in this process space
+				link->mServerSocket->CloseListenFd(); // we no longer need this in this process space
+				LcLinkPkt *lcpkt = new LcLinkPkt;
 
 				// handle new connection
+				link->mServerSocket->Recv((char *)&lcpkt, sizeof(LcLinkPkt));
 				sleep(1);
 
+				delete lcpkt;
 				std::cout << "Child process is going to exit!\n";
 				exit(0);
 			}
 			// close this connection as we have created a new process to handle that above.
-			sskt->CloseConnection(connfd);
+			link->mServerSocket->CloseConnection(connfd);
 		}
 	} while (mSearchActive);
 
@@ -71,7 +78,8 @@ void LcFinder::lcServerThread(SecureSocket *sskt) {
 }
 
 
-int LcFinder::ShutdownLcFinder() {
+template <typename T>
+int LcLink<T>::ShutdownLcLink() {
 	mServerSocket->StopConnections();
 	mSearchActive = false;
 	std::cout << __func__ << "() - usleep()\n";
@@ -81,7 +89,8 @@ int LcFinder::ShutdownLcFinder() {
 }
 
 
-int LcFinder::addLocalIPsToList() {
+template <typename T>
+int LcLink<T>::addLocalIPsToList() {
 	struct ifaddrs *ifAddrStruct = NULL;
     struct ifaddrs *ifa = NULL;
     struct in_addr localhost;
@@ -119,7 +128,8 @@ int LcFinder::addLocalIPsToList() {
 }
 
 
-int LcFinder::scanForRemoteLcFinder(struct in_addr *ip) {
+template <typename T>
+int LcLink<T>::scanForRemoteLcLink(struct in_addr *ip) {
 	char ip_str[INET_ADDRSTRLEN];
 	int shift_cnt, i;
 	unsigned int ip_base;
@@ -135,7 +145,7 @@ int LcFinder::scanForRemoteLcFinder(struct in_addr *ip) {
 
 	std::cout << "Start of Remote Scan...\n";
 	//for (i = 2; i < 254; i++) {
-	for (i = 2; i < 254; i++) {
+	for (i = 2; i < 25; i++) {
 		ip->s_addr = ip_base | (i << shift_cnt);
 		inet_ntop(AF_INET, ip, ip_str, INET_ADDRSTRLEN);
 
@@ -151,22 +161,25 @@ int LcFinder::scanForRemoteLcFinder(struct in_addr *ip) {
 }
 
 
-int LcFinder::enterActiveMode() {
+template <typename T>
+int LcLink<T>::enterActiveMode() {
 	std::cout << __func__ << "();\n";
 	return 0;
 }
 
-int LcFinder::EnterSearchMode() {
+
+template <typename T>
+int LcLink<T>::EnterSearchMode() {
 	mSearchActive = true;
 
 	// start a server thread as per LanConnect protocol
 	mServerSocket = new SecureSocket("../../resources");
-	mServerThread = new std::thread(lcServerThread, std::ref(mServerSocket));
+	mServerThread = new std::thread(lcServerThread, this);
 
 	// from the main thread, start scanning other LanConnect nodes as per protocol
 	addLocalIPsToList();
 	for (auto ip : iplist) {
-		scanForRemoteLcFinder(ip);
+		scanForRemoteLcLink(ip);
 	}
 
 	enterActiveMode();
@@ -176,4 +189,5 @@ int LcFinder::EnterSearchMode() {
 
 	return 0;
 }
+#endif
 

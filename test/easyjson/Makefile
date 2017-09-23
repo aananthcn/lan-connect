@@ -10,14 +10,13 @@ CC = g++
 
 LOCAL_IFLAGS = -I. -I${CLASSPATH}
 LOCAL_CFLAGS = -Wall -g -std=c++11 ${LOCAL_IFLAGS}
-LOCAL_LFLAGS = -g -std=c++11 -lssl -lcrypto -L/usr/local/opt/openssl/lib
+LOCAL_LFLAGS = -g -std=c++11 -lssl -lcrypto -L/usr/local/opt/openssl/lib -ljansson
 
 
 
 # objects: that is compiler outputs
-objects = 	LcFind.o \
-			${CLASSPATH}/SecureSocket.o \
-			${CLASSPATH}/LcFinder.o
+objects = 	EasyJsonApp.o \
+			${CLASSPATH}/EasyJson.o
 
 
 %.o: %.cpp
@@ -25,7 +24,7 @@ objects = 	LcFind.o \
 
 
 
-lc-finder: ${objects}
+lc-easyjson: ${objects}
 	$(CC) -o $@ $^ $(LOCAL_LFLAGS)
 
 
@@ -34,13 +33,13 @@ lc-finder: ${objects}
 
 clean:
 	$(RM) ${objects}
-	$(RM) lc-finder
+	$(RM) lc-easyjson
 
 
 debug: LOCAL_CFLAGS += -g -DDEBUG
 debug: LOCAL_LFLAGS += -g -DDEBUG
-debug: lc-finder
+debug: lc-easyjson
 
 
-all: lc-finder
+all: lc-easyjson
 

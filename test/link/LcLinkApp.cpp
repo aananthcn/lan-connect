@@ -1,7 +1,7 @@
 #include <iostream>
 
 
-#include "LcFinder.h"
+#include "LcLink.h"
 
 using namespace LanConnect;
 
@@ -14,11 +14,11 @@ void rx_callback(char *data, int len)
 
 int main(void)
 {
-	LcFinder lfinder;
+	LcLink<int> lfinder;
 
 	lfinder.EnterSearchMode();
 	sleep(1);
-	lfinder.ShutdownLcFinder();
+	lfinder.ShutdownLcLink();
 
 	return 0;
 }
