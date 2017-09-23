@@ -20,7 +20,14 @@ int LcProtocol::EstablishLink(void) {
 		return -1;
 	}
 
-	mLink->EnterSearchMode();
+	if (mLink->SearchLcNodes() <= 0) {
+		std::cout << __func__ << "(): no clients available!\n";
+	}
+	else {
+		std::cout << "Following clients are available:\n";
+	}
+	mLink->PrintLcNodes();
+
 	return 0;
 }
 

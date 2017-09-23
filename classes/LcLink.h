@@ -41,20 +41,21 @@ namespace LanConnect {
 		LcLink();
 		~LcLink();
 		int RegisterProtocol(T *proto);
-		int EnterSearchMode();
+		int SearchLcNodes();
+		int PrintLcNodes();
 		int ShutdownLcLink();
 
 	private:
 		SecureSocket *mClientSocket;
 		SecureSocket *mServerSocket;
 		std::thread  *mServerThread;
-		std::list<struct in_addr *> iplist;
+		std::list<std::string> mIpList; // string is chosen because search or find is easier
 		LcLinkPkt *mRxPkt;
 		LcLinkPkt *mTxPkt;
 		T *mProtocol;
 
-		int addLocalIPsToList();
-		int scanForRemoteLcLink(struct in_addr *ip);
+		int addLocalhostToList();
+		int scanForOtherHosts();
 		int enterActiveMode();
 
 		static bool mSearchActive;
@@ -107,10 +108,7 @@ template <typename T>
 		delete mClientSocket;
 	}
 
-	while (iplist.empty() != true) {
-		delete iplist.front();
-		iplist.pop_front();
-	}
+	mIpList.clear();
 }
 
 
@@ -168,7 +166,7 @@ int LcLink<T>::ShutdownLcLink() {
 
 
 template <typename T>
-int LcLink<T>::addLocalIPsToList() {
+int LcLink<T>::addLocalhostToList() {
 	struct ifaddrs *ifAddrStruct = NULL;
 	struct ifaddrs *ifa = NULL;
 	struct in_addr localhost;
@@ -192,9 +190,9 @@ int LcLink<T>::addLocalIPsToList() {
             else {
             	char ip_str[INET_ADDRSTRLEN];
 
-            	iplist.push_back(ipaddr);
             	inet_ntop(AF_INET, ipaddr, ip_str, INET_ADDRSTRLEN);
-            	std::cout << "Found " << ip_str << "! Adding to the iplist ...\n";
+				mIpList.push_back(ip_str);
+				std::cout << "Found " << ip_str << "! Adding to the mIpList ...\n";
             }
         }
     }
@@ -207,29 +205,38 @@ int LcLink<T>::addLocalIPsToList() {
 
 
 template <typename T>
-int LcLink<T>::scanForRemoteLcLink(struct in_addr *ip) {
+int LcLink<T>::scanForOtherHosts(void) {
 	char ip_str[INET_ADDRSTRLEN];
+
 	int shift_cnt, i;
 	unsigned int ip_base;
 	int connfd;
+	struct in_addr ip;
+
+	inet_pton(AF_INET, mIpList.front().c_str(), &ip);
 
 #ifdef __BIG_ENDIAN__
-	ip_base = (ip->s_addr) & 0xFFFFFF00;
+	ip_base = (ip.s_addr) & 0xFFFFFF00;
 	shift_cnt = 0;
 #else
-	ip_base = (ip->s_addr) & 0x00FFFFFF;
+	ip_base = (ip.s_addr) & 0x00FFFFFF;
 	shift_cnt = 24;
 #endif
 
 	std::cout << "Start of Remote Scan...\n";
 	//for (i = 2; i < 254; i++) {
 	for (i = 2; i < 25; i++) {
-		ip->s_addr = ip_base | (i << shift_cnt);
-		inet_ntop(AF_INET, ip, ip_str, INET_ADDRSTRLEN);
+		ip.s_addr = ip_base | (i << shift_cnt);
+		inet_ntop(AF_INET, &ip, ip_str, INET_ADDRSTRLEN);
 
 		connfd = mClientSocket->Connect(ip_str);
 		if(connfd > 0) {
-			std::cout << "Connected to \"" << ip_str << "\"!\n";
+
+			auto iter = std::find(mIpList.begin(), mIpList.end(), ip_str);
+			if (iter == mIpList.end()) {
+				std::cout << "Found new host: \"" << ip_str << "\"!\n";
+				mIpList.push_back(ip_str);
+			}
 			mClientSocket->Disconnect(connfd);
 		}
 	}
@@ -247,7 +254,7 @@ int LcLink<T>::enterActiveMode() {
 
 
 template <typename T>
-int LcLink<T>::EnterSearchMode() {
+int LcLink<T>::SearchLcNodes() {
 	mSearchActive = true;
 
 	// start a server thread as per LanConnect protocol
@@ -255,15 +262,36 @@ int LcLink<T>::EnterSearchMode() {
 	mServerThread = new std::thread(lcServerThread, this);
 
 	// from the main thread, start scanning other LanConnect nodes as per protocol
-	addLocalIPsToList();
-	for (auto ip : iplist) {
-		scanForRemoteLcLink(ip);
+	addLocalhostToList();
+	scanForOtherHosts();
+
+	mSearchActive = false;
+	std::cout << "Finished searching LanConnect nodes ...\n";
+
+	if (mIpList.size() > 1) {
+		return 1;
+	}
+	return 0;
+}
+
+template <typename T>
+int LcLink<T>::PrintLcNodes() {
+	int i = 0;
+
+	if (mIpList.size() == 0) {
+		std::cout << "LcNode cout is 0\n";
+		return -1;
 	}
 
-	enterActiveMode();
-	mSearchActive = false;
-	std::cout << "Reached end of client thread ...\n";
-	sleep(1); // wait for server threads to finish jobs
+	std::cout << "\nIP addresses scanned:\n";
+	for (auto ip: mIpList) {
+		if (i == 0)
+			std::cout << "  " << ip << " <== This node!\n";
+		else
+			std::cout << "  " << ip << "\n";
+		i++;
+	}
+	std::cout << "\n";
 
 	return 0;
 }
