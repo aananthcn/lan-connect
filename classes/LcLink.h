@@ -242,39 +242,46 @@ int LcLink<T>::addLocalhostToList() {
 template <typename T>
 int LcLink<T>::scanForOtherHosts(void) {
 	char ip_str[INET_ADDRSTRLEN];
+	char if_str[INET_ADDRSTRLEN];
 
 	int shift_cnt, i;
 	unsigned int ip_base;
 	int connfd;
 	struct in_addr ip;
 
-	inet_pton(AF_INET, mIpInterfaceList.front().c_str(), &ip);
+	std::cout << "Start of Remote Scan...\n";
+	for (auto ips : mIpInterfaceList) {
+		//inet_pton(AF_INET, mIpInterfaceList.front().c_str(), &ip);
+		strcpy(if_str, ips.c_str());
+		inet_pton(AF_INET, if_str, &ip);
+		std::cout << "Searching nodes on '" << if_str << "'\n";
 
 #ifdef __BIG_ENDIAN__
-	ip_base = (ip.s_addr) & 0xFFFFFF00;
-	shift_cnt = 0;
+		ip_base = (ip.s_addr) & 0xFFFFFF00;
+		shift_cnt = 0;
 #else
-	ip_base = (ip.s_addr) & 0x00FFFFFF;
-	shift_cnt = 24;
+		ip_base = (ip.s_addr) & 0x00FFFFFF;
+		shift_cnt = 24;
 #endif
 
-	std::cout << "Start of Remote Scan...\n";
 	//for (i = 2; i < 254; i++) {
-	for (i = 2; i < 25; i++) {
-		ip.s_addr = ip_base | (i << shift_cnt);
-		inet_ntop(AF_INET, &ip, ip_str, INET_ADDRSTRLEN);
+		for (i = 2; i < 25; i++) {
+			ip.s_addr = ip_base | (i << shift_cnt);
+			inet_ntop(AF_INET, &ip, ip_str, INET_ADDRSTRLEN);
 
-		connfd = mClientSocket->Connect(ip_str);
-		if(connfd > 0) {
+			connfd = mClientSocket->Connect(ip_str);
+			if(connfd > 0) {
 
-			auto iter = std::find(mIpInterfaceList.begin(), mIpInterfaceList.end(), ip_str);
-			if (iter == mIpInterfaceList.end()) {
-				std::cout << "Found new host: \"" << ip_str << "\"!\n";
-				mIpLanClientList.push_back(ip_str);
+				auto iter = std::find(mIpInterfaceList.begin(), mIpInterfaceList.end(), ip_str);
+				if (iter == mIpInterfaceList.end()) {
+					std::cout << "Found new host: \"" << ip_str << "\"!\n";
+					mIpLanClientList.push_back(ip_str);
+				}
+				mClientSocket->Disconnect(connfd);
 			}
-			mClientSocket->Disconnect(connfd);
 		}
-	}
+		std::cout << "\n";
+	} // interface loop
 	std::cout << "End of Remote Scan...\n";
 
 	return 0;
