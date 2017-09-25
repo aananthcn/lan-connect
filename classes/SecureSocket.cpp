@@ -4,6 +4,7 @@
 
 extern "C" {
 	#include <sys/ioctl.h>
+	#include <signal.h>
 }
 
 

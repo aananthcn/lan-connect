@@ -10,7 +10,7 @@ CC = g++
 
 IFLAGS = -I. -I${CLASSPATH}
 CFLAGS = -Wall -g -std=c++11 ${IFLAGS}
-LFLAGS = -g -std=c++11 -lssl -lcrypto -L/usr/local/opt/openssl/lib -ljansson
+LFLAGS = -g -std=c++11 -lssl -lcrypto -L/usr/local/opt/openssl/lib -ljansson -lpthread
 
 
 # Final binary name

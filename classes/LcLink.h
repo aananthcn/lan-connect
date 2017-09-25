@@ -3,6 +3,7 @@
 
 #include <list>
 #include <thread>
+#include <algorithm>
 
 extern "C" {
 	#include <arpa/inet.h>
