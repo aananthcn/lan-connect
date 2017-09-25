@@ -48,9 +48,12 @@ namespace LanConnect {
 
 	private:
 		SecureSocket *mClientSocket;
-		SecureSocket *mServerSocket;
-		std::thread  *mServerThread;
-		std::list<std::string> mIpList; // string is chosen because search or find is easier
+		SecureSocket *mSearchSrvSocket;
+		SecureSocket *mActiveSrvSocket;
+		std::thread  *mSearchSrvThread;
+		std::thread  *mActiveSrvThread;
+		std::list<std::string> mIpInterfaceList; // string is chosen because search or find is easier
+		std::list<std::string> mIpLanClientList; // string is chosen because search or find is easier
 		LcLinkPkt *mRxPkt;
 		LcLinkPkt *mTxPkt;
 		T *mProtocol;
@@ -60,6 +63,7 @@ namespace LanConnect {
 
 		static bool mSearchActive;
 		static void lcServerThread_SearchMode(LcLink *link);
+		static void lcServerThread_ActiveMode(LcLink *link);
 		static void serveClientConnection(void);
 	};
 
@@ -86,7 +90,7 @@ template <typename T>
 
 template <typename T>
 	LcLink<T>::LcLink() {
-		mServerSocket = NULL;
+		mSearchSrvSocket = NULL;
 		mClientSocket = new SecureSocket();
 		mProtocol = NULL;
 	}
@@ -94,21 +98,27 @@ template <typename T>
 
 template <typename T>
 	LcLink<T>::~LcLink() {
-		if (mServerThread) {
-			mServerThread->join();
-			delete mServerThread;
+		if (mSearchSrvThread) {
+			mSearchSrvThread->join();
+			delete mSearchSrvThread;
 		}
 
-		if (mServerSocket) {
-		mServerSocket->StopConnections(); // to initiate stopping all server threads
-		delete mServerSocket;
+		if (mActiveSrvThread) {
+			mActiveSrvThread->join();
+			delete mActiveSrvThread;
+		}
+
+		if (mSearchSrvSocket) {
+		mSearchSrvSocket->StopConnections(); // to initiate stopping all server threads
+		delete mSearchSrvSocket;
 	}
 
 	if (mClientSocket) {
 		delete mClientSocket;
 	}
 
-	mIpList.clear();
+	mIpInterfaceList.clear();
+	mIpLanClientList.clear();
 }
 
 
@@ -116,33 +126,56 @@ template <typename T>
 void LcLink<T>::lcServerThread_SearchMode(LcLink<T> *link) {
 	int connfd;
 
-	std::cout << __func__ << "(): starting server thread...\n";
+	std::cout << __func__ << "(): starting thread (Search Mode)...\n";
 	do {
-		connfd = link->mServerSocket->OpenConnection();
+		connfd = link->mSearchSrvSocket->OpenConnection();
 		if (connfd > 0) {
 			if (0 == fork()) {
 				std::cout << "Got a connection, creating a child process to handle the current socket\n";
-				link->mServerSocket->CloseListenFd(); // we no longer need this in this process space
-				#if 0 // handling incoming messages are not allowed in search mode
-				LcLinkPkt *lcpkt = new LcLinkPkt;
-
-				// handle new connection
-				if (link->mProtocol != NULL) {
-					link->mServerSocket->Recv((char *)&lcpkt, sizeof(LcLinkPkt));
-				}
-
-				delete lcpkt;
-				#endif
+				link->mSearchSrvSocket->CloseListenFd(); // we no longer need this in this process space
 				std::cout << "Child process is going to exit!\n";
 				exit(0);
 			}
 			// close this connection as we have created a new process to handle that above.
-			link->mServerSocket->CloseConnection(connfd);
+			link->mSearchSrvSocket->CloseConnection(connfd);
 		}
 	} while (mSearchActive);
 
-	std::cout << __func__ << "(): exiting thread!\n";
+	std::cout << __func__ << "(): exiting server search mode thread!\n";
 }
+
+
+template <typename T>
+void LcLink<T>::lcServerThread_ActiveMode(LcLink<T> *link) {
+	int connfd;
+
+	std::cout << __func__ << "(): starting thread (Active Mode)...\n";
+	do {
+		connfd = link->mActiveSrvSocket->OpenConnection();
+		if (connfd > 0) {
+			if (0 == fork()) {
+				std::cout << "Got a connection, creating a child process to handle the current socket\n";
+				link->mActiveSrvSocket->CloseListenFd(); // we no longer need this in this process space
+				LcLinkPkt *lcpkt = new LcLinkPkt;
+
+				// handle new connection
+				if (link->mProtocol != NULL) {
+					link->mActiveSrvSocket->Recv((char *)&lcpkt, sizeof(LcLinkPkt));
+					link->mProtocol->HandleRxMessage(lcpkt);
+				}
+
+				delete lcpkt;
+				std::cout << "Child process is going to exit!\n";
+				exit(0);
+			}
+			// close this connection as we have created a new process to handle that above.
+			link->mActiveSrvSocket->CloseConnection(connfd);
+		}
+	} while (mSearchActive);
+
+	std::cout << __func__ << "(): exiting server active mode thread!\n";
+}
+
 
 template <typename T>
 int LcLink<T>::RegisterProtocol(T *proto) {
@@ -157,7 +190,7 @@ int LcLink<T>::RegisterProtocol(T *proto) {
 
 template <typename T>
 int LcLink<T>::ShutdownLcLink() {
-	mServerSocket->StopConnections();
+	mSearchSrvSocket->StopConnections();
 	mSearchActive = false;
 	std::cout << __func__ << "() - usleep()\n";
 	usleep(100*1000); // wait for server thread to exit
@@ -192,7 +225,7 @@ int LcLink<T>::addLocalhostToList() {
             	char ip_str[INET_ADDRSTRLEN];
 
             	inet_ntop(AF_INET, ipaddr, ip_str, INET_ADDRSTRLEN);
-				mIpList.push_back(ip_str);
+				mIpInterfaceList.push_back(ip_str);
 				std::cout << "Found " << ip_str << "! Adding to the mIpList ...\n";
             }
         }
@@ -214,7 +247,7 @@ int LcLink<T>::scanForOtherHosts(void) {
 	int connfd;
 	struct in_addr ip;
 
-	inet_pton(AF_INET, mIpList.front().c_str(), &ip);
+	inet_pton(AF_INET, mIpInterfaceList.front().c_str(), &ip);
 
 #ifdef __BIG_ENDIAN__
 	ip_base = (ip.s_addr) & 0xFFFFFF00;
@@ -233,10 +266,10 @@ int LcLink<T>::scanForOtherHosts(void) {
 		connfd = mClientSocket->Connect(ip_str);
 		if(connfd > 0) {
 
-			auto iter = std::find(mIpList.begin(), mIpList.end(), ip_str);
-			if (iter == mIpList.end()) {
+			auto iter = std::find(mIpInterfaceList.begin(), mIpInterfaceList.end(), ip_str);
+			if (iter == mIpInterfaceList.end()) {
 				std::cout << "Found new host: \"" << ip_str << "\"!\n";
-				mIpList.push_back(ip_str);
+				mIpLanClientList.push_back(ip_str);
 			}
 			mClientSocket->Disconnect(connfd);
 		}
@@ -250,6 +283,13 @@ int LcLink<T>::scanForOtherHosts(void) {
 template <typename T>
 int LcLink<T>::EnterActiveMode() {
 	std::cout << __func__ << "();\n";
+	// start the Active Mode server thread here
+	mActiveSrvSocket = new SecureSocket("../../resources");
+	mActiveSrvThread = new std::thread(lcServerThread_ActiveMode, this);
+
+	// start connecting to the clients in the mIpList
+	/* delete this line */ mActiveSrvSocket->Send("Hi hi hi", 8);
+
 	return 0;
 }
 
@@ -259,18 +299,18 @@ int LcLink<T>::SearchLcNodes() {
 	mSearchActive = true;
 
 	// start a server thread as per LanConnect protocol
-	mServerSocket = new SecureSocket("../../resources");
-	mServerThread = new std::thread(lcServerThread_SearchMode, this);
+	mSearchSrvSocket = new SecureSocket("../../resources");
+	mSearchSrvThread = new std::thread(lcServerThread_SearchMode, this);
 
 	// from the main thread, start scanning other LanConnect nodes as per protocol
 	addLocalhostToList();
 	scanForOtherHosts();
 
 	mSearchActive = false;
-	mServerSocket->StopConnections();
+	mSearchSrvSocket->StopConnections();
 	std::cout << "Finished searching LanConnect nodes ...\n";
 
-	if (mIpList.size() > 1) {
+	if (mIpLanClientList.size() > 0) {
 		return 1;
 	}
 	return 0;
@@ -280,14 +320,14 @@ template <typename T>
 int LcLink<T>::PrintLcNodes() {
 	int i = 0;
 
-	if (mIpList.size() == 0) {
-		std::cout << "LcNode cout is 0\n";
+	if (mIpLanClientList.size() == 0) {
+		std::cout << "LcNode count is 0\n";
 		return -1;
 	}
 
 	std::cout << "\nIP addresses scanned:\n";
 	std::cout << "---------------------\n";
-	for (auto ip: mIpList) {
+	for (auto ip: mIpLanClientList) {
 		if (i == 0)
 			std::cout << "  " << ip << " <== This node!\n";
 		else
