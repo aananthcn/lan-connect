@@ -12,6 +12,7 @@ int main(void)
 	LcProtocol lcp;
 
 	lcp.EstablishLink();
+	lcp.LinkDisconnect();
 
 
 	return 0;

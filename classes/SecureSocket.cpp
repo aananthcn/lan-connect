@@ -93,6 +93,7 @@ void SecureSocket::CloseConnection(int connfd) {
 	}
 
 	closeConnection("Server");
+	mSocketInited = false;
 
 	if (connfd > 0) {
 		if (close(connfd) == -1) {

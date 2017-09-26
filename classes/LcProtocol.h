@@ -11,6 +11,7 @@ namespace LanConnect {
 
 		int HandleRxMessage(LcLinkPkt *pkt);
 		int EstablishLink();
+		int LinkDisconnect();
 
 	private:
 		LcLink<LcProtocol> *mLink;

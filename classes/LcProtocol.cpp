@@ -34,3 +34,10 @@ int LcProtocol::HandleRxMessage(LcLinkPkt *pkt) {
 
 	return 0;
 }
+
+
+int LcProtocol::LinkDisconnect(void) {
+	mLink->ShutdownLcLink();
+
+	return 0;
+}
